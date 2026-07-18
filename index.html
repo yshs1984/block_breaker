@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>ブロック崩し</title>
+  <style>
+    /* ===== 見た目（CSS） ===== */
+    /* 画面全体を暗い背景にして、中央にゲームを置く */
+    html, body {
+      margin: 0;
+      height: 100%;
+      background: #10131a;
+      color: #e6e9f0;
+      font-family: system-ui, "Hiragino Sans", "Meiryo", sans-serif;
+    }
+    .wrap {
+      min-height: 100%;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 12px;
+      padding: 16px;
+      box-sizing: border-box;
+    }
+    /* キャンバス（ゲーム描画エリア） */
+    canvas {
+      background: #0b0e14;
+      border-radius: 10px;
+      box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5);
+      /* 画面が小さいときは縮小して収める */
+      max-width: 100%;
+      height: auto;
+      touch-action: none;
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <!-- ゲームはすべてこのキャンバスの中に描かれます（操作説明もキャンバス内に表示） -->
+    <canvas id="game" width="480" height="640"></canvas>
+  </div>
+
+  <!--
+    コードは game.js（ゲーム本体）→ tutorial.js（チュートリアルモード）の順に読み込みます。
+    どちらも普通の <script> 読み込み（モジュールではない）なので、ビルドやサーバは不要です。
+    game.js の中で定義した変数・関数は、そのまま tutorial.js からも使えます。
+  -->
+  <script src="game.js"></script>
+  <script src="tutorial.js"></script>
+</body>
+</html>
