@@ -24,8 +24,10 @@
 | --- | --- |
 | ← → | パドルを左右移動（速さ `paddleSpeed`） |
 | ↑ ↓ | パドルを前後（上下）移動（速さ `paddleVertSpeed`） |
-| スペース | `ready`/`gameover` → 新規ゲーム開始、`clear` → 次ステージへ、`tutorial` の info ステップ → 次のステップへ |
+| スペース | `ready` → 新規ゲーム開始（デバッグ表示中は選択ステージから、通常はステージ1）、`gameover` → ステージ1から再開、`clear` → 次ステージへ、`tutorial` の info ステップ → 次のステップへ |
 | T | `ready` 中のみチュートリアル開始 |
+| D | `ready` 中のみデバッグ用ステージ選択表示のオン/オフ |
+| ↑ ↓（`ready` かつデバッグ表示中） | 開始ステージ `debugStartStage` を ±1（1〜`debugMaxStage` でクランプ） |
 | Escape | `tutorial` 中のみ中断してスタート画面へ戻る |
 | P | `playing`／`tutorial` 中のみポーズ⇄再開を切り替え |
 | Shift（押しっぱなし） | 溜め撃ちのチャージ。離すと即座に0へ戻る |
@@ -77,6 +79,13 @@
 - ミス時（`playing` 中のみ）: 残機減少、ミス音、落下中アイテム・全タイマー・チャージ・パワーヒット残数・パドル反動をリセットし、パドルとボールを初期位置に戻す（残機が残っていれば続行）。**`tutorial` 中は残機を減らさず、ボールをパドル上に戻すだけ**
 - ステージクリア: `playing` 中に生存ブロック（`indestructible` を除く）が0個になった瞬間に `clear` 状態へ（`tutorial` 中はブロックが全滅してもこの判定は行わない）。次ステージ開始時（`nextStage()`）にパドル・ブロックを再配置し、ボールをリセット。**落下中アイテムと破片パーティクルは持ち越さずクリアする**
 - ステージ経過時間（`game.stageTime`、フレーム数）: `playing` 中のみ加算（ポーズ・`tutorial`・`gameover`・`clear` 中は増えない）。`startNewGame()` と `nextStage()` の両方で0にリセット。画面上部中央に `formatTime()` で「分:秒」形式（例 `1:23`）に変換して表示
+
+## デバッグ用ステージ選択
+
+- `startNewGame(startStage = 1)` は開始ステージを引数で受け取る（既定1）。`game.stage = startStage` にして通常どおり `buildBricks()`（ステージ相当の行数・壊れないブロック混入）で開始する
+- スタート画面（`ready`）で `D` キーを押すと `game.debugMode` をトグル。オン中はスタート画面に `drawDebugPanel()` で「開始ステージ N」を表示し、`↑↓` で `game.debugStartStage` を 1〜`debugMaxStage`（既定20）の範囲で増減する
+- スペースキーは `ready` のとき `startNewGame(game.debugMode ? game.debugStartStage : 1)` を呼ぶ。`gameover` からの再開は常に `startNewGame(1)`
+- `game.debugMode` / `game.debugStartStage` はスタート画面専用の状態で、`startNewGame()` ではリセットしない（次に `ready` に戻っても選択を保持）。プレイ中・チュートリアル中は `D`/`↑↓` のデバッグ操作は無視される
 
 ## アイテム
 
