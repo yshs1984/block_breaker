@@ -55,6 +55,16 @@
     paddleRecoilDecay: 0.85,// 毎フレームの減衰率（大きいほど長く尾を引く）
     paddleKnockbackMult: 1.0,// ボールを弾いたとき実際に後退する量（反動 × この倍率。0で実後退なし）
     paddleShakeAmp: 1.5,    // チャージ完了中にパドルが震える振れ幅（ピクセル）
+
+    // --- 邪魔な障害物（ステージが進むと登場。どちらも壊れない） ---
+    indestructibleStartStage: 3,    // このステージ数から「壊れないブロック」が普通のブロックに紛れ始める
+    indestructibleMaxCount: 4,      // 1ステージあたりの壊れないブロックの上限数
+    floatingObstacleStartStage: 5,  // このステージ数から「フラフラ障害物」が出現し始める
+    floatingObstacleSpeed: 1.8,     // 左右に動く速さ
+    floatingObstacleLifeSeconds: 7, // 1回の出現で存在し続ける時間（秒）
+    floatingObstacleMinGap: 4,      // 消えてから次に出るまでの最短間隔（秒）
+    floatingObstacleMaxGap: 9,      // 同、最長間隔（秒）
+    floatingObstacleBobAmp: 8,      // 上下にフラフラ揺れる振れ幅（ピクセル）
   };
 
   // ブロックの色（行ごとに変えると見た目が楽しい）
@@ -99,6 +109,8 @@
     powerHits: 0,    // パワーヒットで残り何個、反射せず壊せるか
     paddleRecoil: 0, // パドルがボールを弾いたときの反動（見た目だけの下げ幅）
     paused: false,   // ポーズ中かどうか
+    obstacle: null,        // フラフラ動く障害物（1個だけ存在。null なら非表示）
+    obstacleSpawnTimer: 0, // 次に出現するまでの残りフレーム数
     // 以下はチュートリアルモード（tutorial.js）が「プレイヤーが何をしたか」を検知するための
     // 軽量なカウンタ。増えるだけで、他の用途では使わない。
     _paddleBounces: 0,      // パドルでボールを弾いた回数
@@ -144,6 +156,7 @@
   const soundGood    = () => { beep(880,0.08,"triangle"); setTimeout(()=>beep(1174,0.1,"triangle"),80); }; // 良いアイテム
   const soundBad     = () => beep(120, 0.2, "sawtooth");  // 悪いアイテム（低い音）
   const soundPower   = () => { beep(300,0.05,"sawtooth"); setTimeout(()=>beep(600,0.1,"sawtooth"),50); }; // パワーヒット発動
+  const soundClang   = () => beep(200, 0.08, "square", 0.08); // 壊れない障害物にぶつかったときの硬い音
 
   // ==================================================================
   //  セットアップ（配置し直す）系の関数
@@ -186,9 +199,32 @@
           h: bh,
           color: BRICK_COLORS[r % BRICK_COLORS.length],
           alive: true,
+          indestructible: false, // true だと見た目は普通のブロックのまま、当たっても壊れない
+          revealed: false,       // 一度当たって「壊れないブロックだ」と判明したか
         });
       }
     }
+    // ステージが十分進んだら、見た目は普通のブロックに紛れ込ませた「壊れないブロック」を混ぜる
+    if (game.stage >= CONFIG.indestructibleStartStage) {
+      const count = Math.min(
+        game.stage - CONFIG.indestructibleStartStage + 1,
+        CONFIG.indestructibleMaxCount,
+        game.bricks.length
+      );
+      const chosen = [];
+      while (chosen.length < count) {
+        const i = Math.floor(Math.random() * game.bricks.length);
+        if (!chosen.includes(i)) chosen.push(i);
+      }
+      for (const i of chosen) game.bricks[i].indestructible = true;
+    }
+  }
+
+  // フラフラ障害物が次に出現するまでの待ち時間を、範囲内でランダムに決める（フレーム数）
+  function randomObstacleGap() {
+    const minFrames = CONFIG.floatingObstacleMinGap * 60;
+    const maxFrames = CONFIG.floatingObstacleMaxGap * 60;
+    return minFrames + Math.random() * (maxFrames - minFrames);
   }
 
   // 新しいゲームを最初から始める
@@ -207,6 +243,8 @@
     game.powerHits = 0;
     game.paddleRecoil = 0;
     game.paused = false;
+    game.obstacle = null;
+    game.obstacleSpawnTimer = randomObstacleGap();
     game.state = "playing";
   }
 
@@ -231,6 +269,8 @@
     resetBall();
     game.items = [];      // 前のステージで落下中だったアイテムを持ち越さない
     game.particles = [];  // 破片エフェクトの残骸も片付ける
+    game.obstacle = null;
+    game.obstacleSpawnTimer = randomObstacleGap();
     game.state = "playing";
   }
 
@@ -435,6 +475,51 @@
     // 上の壁で反射
     if (ball.y - ball.r < 0) { ball.y = ball.r; ball.dy *= -1; soundBounce(); }
 
+    // --- フラフラ障害物（ステージが十分進むと出現。壊れない） ---
+    if (game.state === "playing" && game.stage >= CONFIG.floatingObstacleStartStage) {
+      if (game.obstacle) {
+        const ob = game.obstacle;
+        // 左右に動き、画面端で跳ね返る
+        ob.x += ob.dx;
+        if (ob.x < 0) { ob.x = 0; ob.dx *= -1; }
+        if (ob.x + ob.w > W) { ob.x = W - ob.w; ob.dx *= -1; }
+        // ゆっくり上下にも揺れて「フラフラ」した感じを出す
+        ob.bobPhase += 0.05;
+        ob.y = ob.baseY + Math.sin(ob.bobPhase) * CONFIG.floatingObstacleBobAmp;
+        ob.life--;
+        if (ob.life <= 0) {
+          game.obstacle = null;
+          game.obstacleSpawnTimer = randomObstacleGap();
+        } else if (circleRectHit(ball, ob)) {
+          // 壊れない壁として、当たった向きに応じて跳ね返すだけ
+          const prevX = ball.x - ball.dx;
+          const prevY = ball.y - ball.dy;
+          const wasOutsideX = prevX < ob.x || prevX > ob.x + ob.w;
+          const wasOutsideY = prevY < ob.y || prevY > ob.y + ob.h;
+          if (wasOutsideX && !wasOutsideY) ball.dx *= -1;
+          else if (wasOutsideY && !wasOutsideX) ball.dy *= -1;
+          else { ball.dx *= -1; ball.dy *= -1; }
+          soundClang();
+        }
+      } else {
+        game.obstacleSpawnTimer--;
+        if (game.obstacleSpawnTimer <= 0) {
+          const w = 70, h = 22;
+          const dir = Math.random() < 0.5 ? -1 : 1;
+          const baseY = H * 0.45;
+          game.obstacle = {
+            x: dir < 0 ? W - w : 0,
+            y: baseY,
+            baseY,
+            w, h,
+            dx: dir * CONFIG.floatingObstacleSpeed,
+            bobPhase: 0,
+            life: CONFIG.floatingObstacleLifeSeconds * 60,
+          };
+        }
+      }
+    }
+
     // --- パドルとの当たり判定 ---
     if (ball.dy > 0 && circleRectHit(ball, pad)) {
       ball.y = pad.y - ball.r; // めり込み防止
@@ -472,6 +557,20 @@
     for (const b of game.bricks) {
       if (!b.alive) continue;
       if (circleRectHit(ball, b)) {
+        // 壊れないブロック：見た目は普通のブロックと同じだったが、当たると正体を現す（灰色）。
+        // 消えることはなく、貫通・パワーヒット中でも無視されず必ず跳ね返す。
+        if (b.indestructible) {
+          b.revealed = true;
+          soundClang();
+          const prevX = ball.x - ball.dx;
+          const prevY = ball.y - ball.dy;
+          const wasOutsideX = prevX < b.x || prevX > b.x + b.w;
+          const wasOutsideY = prevY < b.y || prevY > b.y + b.h;
+          if (wasOutsideX && !wasOutsideY) ball.dx *= -1;
+          else if (wasOutsideY && !wasOutsideX) ball.dy *= -1;
+          else { ball.dx *= -1; ball.dy *= -1; }
+          break;
+        }
         b.alive = false;
         game.score += 10;
         spawnParticles(b.x + b.w / 2, b.y + b.h / 2, b.color);
@@ -536,8 +635,8 @@
       }
     }
 
-    // --- ステージクリア判定（残っているブロックが無い。本編プレイ中だけ判定する） ---
-    if (game.state === "playing" && game.bricks.every((b) => !b.alive)) {
+    // --- ステージクリア判定（壊れないブロックを除き、残っているブロックが無い。本編プレイ中だけ判定する） ---
+    if (game.state === "playing" && game.bricks.every((b) => !b.alive || b.indestructible)) {
       game.state = "clear";
       soundClear();
     }
@@ -618,10 +717,16 @@
     // 画面をいったんクリア
     ctx.clearRect(0, 0, W, H);
 
-    // ブロック
+    // ブロック（壊れないブロックは、正体を現す＝revealed になると灰色になる）
     for (const b of game.bricks) {
       if (!b.alive) continue;
-      drawRoundRect(b.x, b.y, b.w, b.h, 4, b.color);
+      const color = (b.indestructible && b.revealed) ? "#4a4f5c" : b.color;
+      drawRoundRect(b.x, b.y, b.w, b.h, 4, color);
+    }
+
+    // フラフラ障害物（壊れない。存在感のある色で表示）
+    if (game.obstacle) {
+      drawRoundRect(game.obstacle.x, game.obstacle.y, game.obstacle.w, game.obstacle.h, 6, "#6c3fc5");
     }
 
     // エフェクトの粒
