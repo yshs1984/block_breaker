@@ -389,6 +389,32 @@
     return dx * dx + dy * dy <= ball.r * ball.r;
   }
 
+  // ボールを矩形(rect)で跳ね返し、めり込んだぶんを外側へ押し出す。
+  // 「消えずに残る」相手（壊れないブロック・フラフラ障害物）で使う。押し出さないと
+  // 次のフレームでもめり込んだままになり、張り付き・ガタガタが起きるため。
+  // ※ どの辺から当たったかは、1フレーム前の位置(prev)が矩形の外だったかで判断する。
+  function reflectBallOffRect(ball, rect) {
+    const m = ball.r + 0.5; // 半径ぶん＋わずかな余白で、接したまま再衝突しないよう完全に離す
+    const prevX = ball.x - ball.dx;
+    const prevY = ball.y - ball.dy;
+    const wasOutsideX = prevX < rect.x || prevX > rect.x + rect.w;
+    const wasOutsideY = prevY < rect.y || prevY > rect.y + rect.h;
+    // 左右の面に当たったら x 方向に、上下の面なら y 方向に反転＆押し出す
+    if (wasOutsideX && !wasOutsideY) {
+      ball.dx *= -1;
+      ball.x = prevX < rect.x ? rect.x - m : rect.x + rect.w + m;
+    } else if (wasOutsideY && !wasOutsideX) {
+      ball.dy *= -1;
+      ball.y = prevY < rect.y ? rect.y - m : rect.y + rect.h + m;
+    } else {
+      // 角に当たった等：両方反転して両軸で押し出す
+      ball.dx *= -1;
+      ball.dy *= -1;
+      ball.x = prevX < rect.x ? rect.x - m : rect.x + rect.w + m;
+      ball.y = prevY < rect.y ? rect.y - m : rect.y + rect.h + m;
+    }
+  }
+
   // ==================================================================
   //  更新（毎フレーム、動きを1コマ進める）
   // ==================================================================
@@ -491,14 +517,8 @@
           game.obstacle = null;
           game.obstacleSpawnTimer = randomObstacleGap();
         } else if (circleRectHit(ball, ob)) {
-          // 壊れない壁として、当たった向きに応じて跳ね返すだけ
-          const prevX = ball.x - ball.dx;
-          const prevY = ball.y - ball.dy;
-          const wasOutsideX = prevX < ob.x || prevX > ob.x + ob.w;
-          const wasOutsideY = prevY < ob.y || prevY > ob.y + ob.h;
-          if (wasOutsideX && !wasOutsideY) ball.dx *= -1;
-          else if (wasOutsideY && !wasOutsideX) ball.dy *= -1;
-          else { ball.dx *= -1; ball.dy *= -1; }
+          // 壊れない壁として跳ね返す（めり込み押し出しも込み）
+          reflectBallOffRect(ball, ob);
           soundClang();
         }
       } else {
@@ -562,13 +582,7 @@
         if (b.indestructible) {
           b.revealed = true;
           soundClang();
-          const prevX = ball.x - ball.dx;
-          const prevY = ball.y - ball.dy;
-          const wasOutsideX = prevX < b.x || prevX > b.x + b.w;
-          const wasOutsideY = prevY < b.y || prevY > b.y + b.h;
-          if (wasOutsideX && !wasOutsideY) ball.dx *= -1;
-          else if (wasOutsideY && !wasOutsideX) ball.dy *= -1;
-          else { ball.dx *= -1; ball.dy *= -1; }
+          reflectBallOffRect(ball, b); // 消えない相手なので押し出しも込みで反射
           break;
         }
         b.alive = false;
@@ -585,14 +599,8 @@
           continue;
         }
 
-        // 横から当たったか、縦から当たったかで反射方向を決める
-        const prevX = ball.x - ball.dx;
-        const prevY = ball.y - ball.dy;
-        const wasOutsideX = prevX < b.x || prevX > b.x + b.w;
-        const wasOutsideY = prevY < b.y || prevY > b.y + b.h;
-        if (wasOutsideX && !wasOutsideY) ball.dx *= -1;
-        else if (wasOutsideY && !wasOutsideX) ball.dy *= -1;
-        else { ball.dx *= -1; ball.dy *= -1; }
+        // 当たった辺に応じて跳ね返す（ブロックは消えるが、押し出し込みでも挙動は自然）
+        reflectBallOffRect(ball, b);
         break; // 1フレームで壊すのは1個まで（挙動が安定する）
       }
     }

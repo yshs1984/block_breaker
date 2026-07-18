@@ -58,6 +58,7 @@
 - 行ごとに `BRICK_COLORS` から色を割り当て（5色を順に繰り返し）
 - 壊れると: スコア+10、破片パーティクル発生、破壊音、確率 `itemDropChance`（既定30%）でアイテム落下
 - 通常時は1フレームにつき1個だけ破壊し、当たった辺に応じて反射（詳細は「貫通・パワーヒット」参照）
+- ブロック・障害物での反射は共通ヘルパー `reflectBallOffRect(ball, rect)` が担う。1フレーム前の位置から当たった辺を判定して `dx`/`dy` を反転し、**さらにボールを矩形の外側（半径＋0.5px）へ押し出す**。消えずに残る相手（壊れないブロック・フラフラ障害物）でボールがめり込んだまま張り付く・ガタガタするのを防ぐための位置補正
 - **壊れないブロック（`indestructible`）**: `game.stage >= indestructibleStartStage`（既定3）のステージから、`buildBricks()` が通常ブロックの中からランダムに `min(stage - indestructibleStartStage + 1, indestructibleMaxCount)` 個を選んで `indestructible: true` にする。見た目は初期状態では通常ブロックと同じ色（紛れている）。ボールが当たると `revealed: true` になり色が灰色 `#4a4f5c` に変わるが、**`alive` は常に `true` のまま＝消えない**。スコア加算・アイテムドロップは発生せず、`soundClang` を鳴らして壁と同じ要領で反射する。**貫通中・パワーヒット中でも無視されず必ず反射する**（ブロック当たり判定ループの先頭で分岐し、貫通/パワーヒット用の `continue` 処理より先に処理される）。ステージクリア判定は `!b.alive || b.indestructible` を条件にしており、壊れないブロックの存在はクリアを妨げない。
 
 ## フラフラ障害物（`game.obstacle`）
@@ -65,7 +66,7 @@
 - `game.state === "playing"` かつ `game.stage >= floatingObstacleStartStage`（既定5）のときだけ出現・移動する（`tutorial` 中は対象外）
 - 存在しないとき: `game.obstacleSpawnTimer` を毎フレーム1減らし、0以下になったら1個生成する。生成位置は画面の左右どちらかの端、`y` は `H * 0.45` 付近（`baseY`）、サイズは 70×22px
 - 存在する間: `dx`（`floatingObstacleSpeed`、既定1.8）で左右移動し、画面端で反転。`bobPhase` を毎フレーム進めて `y = baseY + sin(bobPhase) * floatingObstacleBobAmp` で上下にも揺れる（「フラフラ」感）。`life`（`floatingObstacleLifeSeconds * 60`、既定7秒ぶんのフレーム）を毎フレーム減らし、0以下で消滅して `game.obstacleSpawnTimer` を `randomObstacleGap()`（`floatingObstacleMinGap`〜`floatingObstacleMaxGap` 秒のランダム値）で再セットする
-- ボールとの当たり判定は壁と同じ要領（当たった辺に応じて `dx`/`dy` を反転）。**壊れず、`life` が尽きるまで何度当たっても消えない**。専用の `soundClang` を鳴らす
+- ボールとの当たり判定は `reflectBallOffRect()`（当たった辺に応じて反転＋外側へ押し出し）。**壊れず、`life` が尽きるまで何度当たっても消えない**。専用の `soundClang` を鳴らす
 - `startNewGame()` / `nextStage()` で `game.obstacle = null` にリセットし、`obstacleSpawnTimer` を新しい乱数で再セットする（ステージ間・新規ゲームで持ち越さない）
 - 描画色は紫 `#6c3fc5`
 
