@@ -39,6 +39,8 @@
     effectSeconds: 8,    // 時間制アイテム（拡大/縮小/スロー/加速）の効果時間（秒）
     pierceSeconds: 5,    // 貫通アイテムの効果時間（秒）
     bigBallScale: 1.6,   // 大玉アイテムで何倍の大きさになるか
+    starSeconds: 6,      // スターアイテム（無敵+加速）の効果時間（秒。強力なので effectSeconds より短め）
+    homingTurnRate: 0.05,// ホーミングアイテム発動中、1フレームで最大何ラジアン曲がれるか（小さいほど緩やか）
 
     // --- 溜め撃ち（パワーヒット）関連 ---
     chargeFullSeconds: 1.2, // Shiftを押しっぱなしにしてから満タンになるまでの秒数
@@ -84,13 +86,21 @@
     fast:   { color: "#e63946", label: "F", good: false }, // ボール加速（悪い）
     pierce: { color: "#ffb703", label: "P", good: true },  // 貫通（良い）
     big:    { color: "#ff70a6", label: "B", good: true },  // 大玉（良い）
+    // 既存の fast/slow（ボール速度）と紛らわしいので、パドル速度用は別名にしている
+    fastPaddle: { color: "#2ec4b6", label: "↑", good: true },  // パドル加速（良い）
+    slowPaddle: { color: "#e76f51", label: "↓", good: false }, // パドル減速（悪い）
+    star:       { color: "#ffd60a", label: "★", good: true },  // 無敵+加速（良い）
+    homing:     { color: "#48cae4", label: "◎", good: true },  // ブロックへ誘導（良い）
   };
   // 抽選に使う種類の一覧
   const ITEM_KEYS = Object.keys(ITEM_TYPES);
 
   // アイテムの出やすさ（重み付き抽選）。数字が大きいほど出やすい。
-  // life（♥ 残機+1）だけ他の約1/6にしてレア化している。
-  const ITEM_WEIGHTS = { wide: 6, slow: 6, life: 1, bonus: 6, narrow: 6, fast: 6, pierce: 6, big: 6 };
+  // life（♥ 残機+1）だけ他の約1/6にしてレア化している。star は無敵という強力な効果なので少し控えめ。
+  const ITEM_WEIGHTS = {
+    wide: 6, slow: 6, life: 1, bonus: 6, narrow: 6, fast: 6, pierce: 6, big: 6,
+    fastPaddle: 6, slowPaddle: 6, star: 3, homing: 6,
+  };
 
   // ------------------------------------------------------------------
   //  ゲームの状態（いま何が起きているかを、ここに全部まとめて持つ）
@@ -107,7 +117,10 @@
     particles: [],   // 破壊エフェクトの小さな粒
     items: [],       // 落下中のアイテム（1つ = {x, y, w, h, type}）
     // 時間制の効果の「残りフレーム数」。0 より大きい間だけ効果が出る（60 = 約1秒）
-    timers: { wide: 0, narrow: 0, slow: 0, fast: 0, pierce: 0, big: 0, powerBoost: 0, powerCooldown: 0 },
+    timers: {
+      wide: 0, narrow: 0, slow: 0, fast: 0, pierce: 0, big: 0, powerBoost: 0, powerCooldown: 0,
+      paddleFast: 0, paddleSlow: 0, star: 0, homing: 0,
+    },
     charge: 0,       // 溜め撃ちのゲージ（0〜1）
     powerHits: 0,    // パワーヒットで残り何個、反射せず壊せるか
     paddleRecoil: 0, // パドルがボールを弾いたときの反動（見た目だけの下げ幅）
@@ -283,6 +296,10 @@
     game.timers.big = 0;
     game.timers.powerBoost = 0;
     game.timers.powerCooldown = 0;
+    game.timers.paddleFast = 0;
+    game.timers.paddleSlow = 0;
+    game.timers.star = 0;
+    game.timers.homing = 0;
   }
 
   // 次のステージへ
@@ -408,6 +425,10 @@
       case "fast":   game.timers.fast = frames;  game.timers.slow = 0;   break;
       case "pierce": game.timers.pierce = CONFIG.pierceSeconds * 60;    break;
       case "big":    game.timers.big = frames;                          break;
+      case "fastPaddle": game.timers.paddleFast = frames; game.timers.paddleSlow = 0; break; // 反対効果は打ち消す
+      case "slowPaddle": game.timers.paddleSlow = frames; game.timers.paddleFast = 0; break;
+      case "star":   game.timers.star = CONFIG.starSeconds * 60;         break;
+      case "homing": game.timers.homing = frames;                       break;
       case "life":   game.lives++;             break;
       case "bonus":  game.score += 100;        break;
     }
@@ -457,6 +478,23 @@
     // 不具合を防ぐ（上限側=下は画面外に落ちる「ミス」判定があるので、下方向はクランプしない）。
     ball.x = Math.max(ball.r, Math.min(W - ball.r, ball.x));
     ball.y = Math.max(ball.r, ball.y);
+  }
+
+  // ホーミングアイテム用: 生存していて壊れないブロックでもない、最も近いブロックを返す（無ければ null）
+  function findNearestBrick() {
+    const ball = game.ball;
+    let nearest = null;
+    let nearestDist = Infinity;
+    for (const b of game.bricks) {
+      if (!b.alive || b.indestructible) continue;
+      const cx = b.x + b.w / 2, cy = b.y + b.h / 2;
+      const dist = (cx - ball.x) * (cx - ball.x) + (cy - ball.y) * (cy - ball.y);
+      if (dist < nearestDist) {
+        nearestDist = dist;
+        nearest = b;
+      }
+    }
+    return nearest;
   }
 
   // ==================================================================
@@ -513,21 +551,49 @@
     game.paddleRecoil *= CONFIG.paddleRecoilDecay;
     if (game.paddleRecoil < 0.5) game.paddleRecoil = 0;
 
+    // --- パドルの動く速さを効果に応じて決める（fastPaddle=加速 / slowPaddle=減速）---
+    // 左右・前後どちらの移動にも同じ倍率をかける
+    let paddleSpeed = CONFIG.paddleSpeed;
+    let paddleVertSpeed = CONFIG.paddleVertSpeed;
+    if (game.timers.paddleFast > 0) { paddleSpeed *= 1.6; paddleVertSpeed *= 1.6; }
+    if (game.timers.paddleSlow > 0) { paddleSpeed *= 0.6; paddleVertSpeed *= 0.6; }
+
     // --- パドルを動かす（左右） ---
-    if (keys.left)  pad.x -= CONFIG.paddleSpeed;
-    if (keys.right) pad.x += CONFIG.paddleSpeed;
+    if (keys.left)  pad.x -= paddleSpeed;
+    if (keys.right) pad.x += paddleSpeed;
     // 画面の外に出ないよう止める
     if (pad.x < 0) pad.x = 0;
     if (pad.x + pad.w > W) pad.x = W - pad.w;
 
     // --- パドルを動かす（前後＝上下） ---
-    if (keys.up)   pad.y -= CONFIG.paddleVertSpeed;
-    if (keys.down) pad.y += CONFIG.paddleVertSpeed;
+    if (keys.up)   pad.y -= paddleVertSpeed;
+    if (keys.down) pad.y += paddleVertSpeed;
     // 前（上）は画面の下側1/3まで、後ろ（下）は初期位置まで
     const forwardLimit = H * CONFIG.paddleForwardRatio;
     const backLimit = H - 40;
     if (pad.y < forwardLimit) pad.y = forwardLimit;
     if (pad.y > backLimit) pad.y = backLimit;
+
+    // --- ホーミング（誘導）：効果中は毎フレーム、進行方向を少しずつ最も近いブロックへ向ける ---
+    // 速度の大きさ（ball.dx/dyの長さ）は変えず、向きだけを補正する。
+    if (game.timers.homing > 0) {
+      const target = findNearestBrick();
+      if (target) {
+        const desiredAngle = Math.atan2(
+          (target.y + target.h / 2) - ball.y,
+          (target.x + target.w / 2) - ball.x
+        );
+        const currentAngle = Math.atan2(ball.dy, ball.dx);
+        let diff = desiredAngle - currentAngle;
+        while (diff > Math.PI) diff -= Math.PI * 2;
+        while (diff < -Math.PI) diff += Math.PI * 2;
+        const turn = Math.max(-CONFIG.homingTurnRate, Math.min(CONFIG.homingTurnRate, diff));
+        const speed = Math.hypot(ball.dx, ball.dy);
+        const newAngle = currentAngle + turn;
+        ball.dx = Math.cos(newAngle) * speed;
+        ball.dy = Math.sin(newAngle) * speed;
+      }
+    }
 
     // --- ボールを動かす ---
     // 効果に応じて移動量に倍率をかける（slow=遅く / fast=速く）。
@@ -535,6 +601,7 @@
     let mult = 1;
     if (game.timers.slow > 0) mult *= 0.6;
     if (game.timers.fast > 0) mult *= 1.5;
+    if (game.timers.star > 0) mult *= 1.5; // スター効果中は加速
     if (game.timers.powerBoost > 0) mult *= CONFIG.powerBoostMult; // パワーヒット直後は一瞬だけ加速
     ball.x += ball.dx * mult;
     ball.y += ball.dy * mult;
@@ -667,7 +734,12 @@
 
     // --- ボールを下に落とした（ミス） ---
     if (ball.y - ball.r > H) {
-      if (game.state === "playing") {
+      if (game.state === "playing" && game.timers.star > 0) {
+        // スター効果中は下の壁と同じ扱いで跳ね返す（ミスにならない）
+        ball.y = H - ball.r;
+        ball.dy *= -1;
+        soundBounce();
+      } else if (game.state === "playing") {
         game.lives--;
         soundMiss();
         game.items = [];   // 落下中のアイテムは片付ける
@@ -830,8 +902,8 @@
     }
     drawRoundRect(game.paddle.x + shakeX, game.paddle.y + game.paddleRecoil + shakeY, game.paddle.w, game.paddle.h, 7, paddleColor);
 
-    // ボール
-    ctx.fillStyle = "#ffffff";
+    // ボール（スター効果中は金色にして「今は落ちても平気」なことを見た目でも伝える）
+    ctx.fillStyle = game.timers.star > 0 ? "#ffd60a" : "#ffffff";
     ctx.beginPath();
     ctx.arc(game.ball.x, game.ball.y, game.ball.r, 0, Math.PI * 2);
     ctx.fill();
@@ -855,6 +927,10 @@
     if (game.timers.fast > 0)   active.push(["加速", "#e63946", game.timers.fast]);
     if (game.timers.pierce > 0) active.push(["貫通", "#ffb703", game.timers.pierce]);
     if (game.timers.big > 0)    active.push(["大玉", "#ff70a6", game.timers.big]);
+    if (game.timers.paddleFast > 0) active.push(["加速パドル", "#2ec4b6", game.timers.paddleFast]);
+    if (game.timers.paddleSlow > 0) active.push(["減速パドル", "#e76f51", game.timers.paddleSlow]);
+    if (game.timers.star > 0)   active.push(["無敵", "#ffd60a", game.timers.star]);
+    if (game.timers.homing > 0) active.push(["誘導", "#48cae4", game.timers.homing]);
     ctx.font = "13px system-ui, sans-serif";
     let ex = 12;
     for (const [name, color, frames] of active) {

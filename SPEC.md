@@ -37,6 +37,7 @@
 - 初期位置: 画面下部中央、`y = H - 40`（この位置が「後ろの限界」でもある）
 - 前後移動の範囲: 前方（上）は `H * paddleForwardRatio`（既定2/3＝画面下側1/3まで）、後方（下）は `H - 40` まで
 - 幅は `wide`/`narrow` アイテムの効果時間中だけ基準幅の1.6倍／0.6倍に変化（中心位置を保ったまま）
+- 移動速度（左右・前後とも）は `fastPaddle`/`slowPaddle` アイテムの効果時間中だけ基準速度（`paddleSpeed`/`paddleVertSpeed`）の1.6倍／0.6倍に変化
 - 色:
   - 通常: 白系 `#e6e9f0`
   - チャージが発動ライン（`chargeThreshold`）以上: ピンク `#ff8fa3`
@@ -49,10 +50,12 @@
 - 半径 `ballRadius`（既定8）。`big` アイテムの効果中は `bigBallScale` 倍（既定1.6倍）に拡大、当たり判定も連動
 - 基本速度 `ballSpeed`（既定4.2）＋ `(ステージ数-1) × speedUpPerStage`（既定0.35。ステージが上がるほど速くなる。旧既定0.6はステージ5以降の難易度が急上昇しすぎるため緩和した）
 - 移動量には毎フレーム倍率 `mult` がかかる（`dx`/`dy` 自体は変えない）:
-  - `slow` 効果中: ×0.6　／　`fast` 効果中: ×1.5　／　`powerBoost` 中: × `powerBoostMult`（既定1.6）
+  - `slow` 効果中: ×0.6　／　`fast` 効果中: ×1.5　／　`star` 効果中: ×1.5　／　`powerBoost` 中: × `powerBoostMult`（既定1.6）
   - 複数条件が重なる場合は掛け算で合成
 - 壁（左右・上）で反射、パドルで反射
 - パドル反射: 当たった位置に応じて反射角が変わる（中心なら垂直、端に行くほど最大60度まで曲がる）。反射後の速さは直前の速さを維持
+- **ホーミング（`homing` タイマー中）**: 移動量の計算より前に、`findNearestBrick()`（生存かつ `indestructible` でないブロックのうち最も近いもの。無ければ何もしない）へ向けて進行方向を補正する。現在角度と目標角度の差を `±homingTurnRate`（既定0.05ラジアン/フレーム）でクランプして少しずつ回転させ、速度の大きさ（`Math.hypot(dx,dy)`）は変えない。壁・パドル・ブロックへの反射は既存のまま（反射後、次のフレームからまた誘導が再開する）
+- **スター（`star` タイマー中）**: 画面下端 (`ball.y - ball.r > H`) に達しても `playing` 中のミス処理を行わず、下の壁と同じ要領で跳ね返す（`ball.y = H - ball.r; ball.dy *= -1;`）。ボールの塗り色も金色 `#ffd60a` に変わる（通常は白）
 
 ## ブロック
 
@@ -105,13 +108,18 @@
 | F | `fast` | ボール速度×1.5（`effectSeconds`秒） | 悪 |
 | P | `pierce` | ブロックを貫通（`pierceSeconds`秒） | 良 |
 | B | `big` | ボール拡大 ×`bigBallScale`（`effectSeconds`秒） | 良 |
+| ↑ | `fastPaddle` | パドルの左右・前後移動速度 ×1.6（`effectSeconds`秒） | 良 |
+| ↓ | `slowPaddle` | パドルの左右・前後移動速度 ×0.6（`effectSeconds`秒） | 悪 |
+| ★ | `star` | 無敵（ミスにならず下端で跳ね返る）＋ボール速度×1.5（`starSeconds`秒） | 良 |
+| ◎ | `homing` | ボールが最も近い生存ブロックへ毎フレーム少しずつ向きを補正（`effectSeconds`秒） | 良 |
 
-- `wide`⇄`narrow`、`slow`⇄`fast` は反対効果同士で取得時に打ち消し合う
+- `wide`⇄`narrow`、`slow`⇄`fast`、`fastPaddle`⇄`slowPaddle` は反対効果同士で取得時に打ち消し合う
 - 取得音: 良いアイテムは `soundGood`、悪いアイテムは `soundBad`
+- `fastPaddle`/`slowPaddle` は既存の `fast`/`slow`（ボール速度用）と紛らわしいため別キー名にしている
 
 ### 出現率（重み付き抽選、`ITEM_WEIGHTS`）
 
-`life` のみ重み1、他は全て重み6（＝`life` は他の約1/6の確率でしか出現しない、意図的なレア化）。
+`life` のみ重み1、`star` は重み3（無敵という強力な効果のため主要アイテムよりやや控えめ）、他は全て重み6。
 
 ## 貫通（pierce）
 
