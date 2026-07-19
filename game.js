@@ -63,7 +63,8 @@
 
     // --- 邪魔な障害物（ステージが進むと登場。どちらも壊れない） ---
     indestructibleStartStage: 3,    // このステージ数から「壊れないブロック」が普通のブロックに紛れ始める
-    indestructibleMaxCount: 4,      // 1ステージあたりの壊れないブロックの上限数
+    indestructibleMaxCount: 10,     // 壊れないブロックの上限数
+    indestructibleStagesPerStep: 2, // この数のステージが経つごとに1個増える（貫通・速い球への対策）
     floatingObstacleStartStage: 5,  // このステージ数から「フラフラ障害物」が出現し始める
     floatingObstacleSpeed: 1.8,     // 左右に動く速さ
     floatingObstacleLifeSeconds: 7, // 1回の出現で存在し続ける時間（秒）
@@ -238,7 +239,7 @@
     // 隙間にボールが挟まると、反射がずっと打ち消し合って抜け出せなくなるバグがあったため。
     if (game.stage >= CONFIG.indestructibleStartStage) {
       const count = Math.min(
-        game.stage - CONFIG.indestructibleStartStage + 1,
+        Math.floor((game.stage - CONFIG.indestructibleStartStage) / CONFIG.indestructibleStagesPerStep) + 1,
         CONFIG.indestructibleMaxCount,
         game.bricks.length
       );
