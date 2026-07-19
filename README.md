@@ -99,6 +99,7 @@
 | ブロックの行数の上限 | `brickMaxRows`（これ以上ステージが進んでも増えない） |
 | 最初の残機 | `startLives` |
 | ステージごとの加速 | `speedUpPerStage` |
+| ボール速度の上限 | `ballSpeedCap`（これ以上ステージが進んでも基礎速度は増えない） |
 | アイテムの落ちやすさ | `itemDropChance`（0〜1。0.3=30%） |
 | アイテム効果の長さ | `effectSeconds`（秒） |
 | アイテムの落ちる速さ | `itemFallSpeed` |

@@ -26,6 +26,7 @@
     ballRadius: 8,       // ボールの大きさ（半径）
     ballSpeed: 4.2,      // ボールの基本スピード（ステージが上がると少し速くなる）
     speedUpPerStage: 0.35,// 1ステージごとに増えるスピード（旧0.6。ステージ5以降が急激に難しくなりすぎるため緩和）
+    ballSpeedCap: 6.65,   // ステージ由来の基礎速度の上限（ballSpeed + 7*speedUpPerStage＝ステージ8時点の速度。brickMaxRowsの頭打ちと合わせている）
     brickRows: 4,        // ブロックの行数（ステージ1のときの基準）
     brickMaxRows: 11,    // ブロックの行数の上限（これ以上ステージが進んでも増えない。パドルの前進限界より上に収める）
     brickCols: 8,        // ブロックの列数
@@ -192,7 +193,12 @@
 
   // ボールをパドルの上に戻し、上向きに撃ち出す準備
   function resetBall() {
-    const speed = CONFIG.ballSpeed + (game.stage - 1) * CONFIG.speedUpPerStage;
+    // ステージが進むほど速くなるが、ballSpeedCap で頭打ちにする（Issue #19）。
+    // アイテムによる一時的な加速（fast/star/powerBoost）は mult 側で別途かかるので対象外。
+    const speed = Math.min(
+      CONFIG.ballSpeed + (game.stage - 1) * CONFIG.speedUpPerStage,
+      CONFIG.ballSpeedCap
+    );
     game.ball.x = game.paddle.x + game.paddle.w / 2;
     game.ball.y = game.paddle.y - game.ball.r - 1;
     // 少し斜め上に飛ばす（左右はランダム）
