@@ -77,6 +77,9 @@
 
     // --- ランキング ---
     rankingMaxEntries: 5,   // ランキングの保存・表示件数
+
+    // --- スコアによる残機ボーナス ---
+    lifeBonusScore: 1000,   // このスコアに達するたびに残機+1（超えた分は繰り越さず、単純に閾値を超えたかで判定する）
   };
 
   // ブロックの色（行ごとに変えると見た目が楽しい）
@@ -123,6 +126,7 @@
     stageTime: 0,    // 今のステージの経過フレーム数（表示は formatTime() で M:SS に変換）
     stageTimes: [],  // このプレイでクリアした各ステージの所要フレーム数（クリアした順）
     _rankingCache: [], // gameover 遷移時に読み込んだランキングを draw() で使い回すキャッシュ
+    _lifeBonusNextScore: 1000, // 次に残機+1になるスコアのライン（startNewGame()で lifeBonusScore にリセット）
     paddle: { x: 0, y: 0, w: 0, h: 0 },
     ball: { x: 0, y: 0, dx: 0, dy: 0, r: CONFIG.ballRadius },
     bricks: [],      // ブロックの配列（1つ = {x, y, w, h, color, alive}）
@@ -288,6 +292,7 @@
   function startNewGame(startStage = 1) {
     game.score = 0;
     game.lives = CONFIG.startLives;
+    game._lifeBonusNextScore = CONFIG.lifeBonusScore;
     game.stage = startStage;
     game.stageTime = 0;
     game.stageTimes = [];
@@ -788,6 +793,15 @@
       } else if (game.state === "tutorial") {
         // 練習中はボールを落としても失敗にならない。パドル上に戻すだけ
         resetBall();
+      }
+    }
+
+    // --- スコアに応じた残機ボーナス（同一フレームで複数回線を越えても取りこぼさないよう while で判定） ---
+    if (game.state === "playing") {
+      while (game.score >= game._lifeBonusNextScore) {
+        game.lives++;
+        game._lifeBonusNextScore += CONFIG.lifeBonusScore;
+        soundGood(); // ♥アイテムと同じ「良いことが起きた」音を流用
       }
     }
 
