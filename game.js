@@ -74,10 +74,16 @@
 
     // --- デバッグ用 ---
     debugMaxStage: 20,      // デバッグ用ステージ選択で選べる最大ステージ
+
+    // --- ランキング ---
+    rankingMaxEntries: 5,   // ランキングの保存・表示件数
   };
 
   // ブロックの色（行ごとに変えると見た目が楽しい）
   const BRICK_COLORS = ["#ff6b6b", "#ffd166", "#06d6a0", "#4cc9f0", "#c77dff"];
+
+  // ローカルランキングの保存キー（localStorage）
+  const RANKING_STORAGE_KEY = "breakout_ranking_v1";
 
   // アイテムの種類（色・表示する文字・良い/悪い）
   //  good=true は取ると嬉しい、false は取ると困るアイテム
@@ -115,6 +121,8 @@
     lives: CONFIG.startLives,
     stage: 1,
     stageTime: 0,    // 今のステージの経過フレーム数（表示は formatTime() で M:SS に変換）
+    stageTimes: [],  // このプレイでクリアした各ステージの所要フレーム数（クリアした順）
+    _rankingCache: [], // gameover 遷移時に読み込んだランキングを draw() で使い回すキャッシュ
     paddle: { x: 0, y: 0, w: 0, h: 0 },
     ball: { x: 0, y: 0, dx: 0, dy: 0, r: CONFIG.ballRadius },
     bricks: [],      // ブロックの配列（1つ = {x, y, w, h, color, alive}）
@@ -282,6 +290,7 @@
     game.lives = CONFIG.startLives;
     game.stage = startStage;
     game.stageTime = 0;
+    game.stageTimes = [];
     resetPaddle();
     buildBricks();
     resetBall();
@@ -768,6 +777,7 @@
         game.paddleRecoil = 0;
         if (game.lives <= 0) {
           game.state = "gameover";
+          recordGameOverRanking(); // 状態遷移の瞬間に1回だけ、ランキングへ記録する
         } else {
           resetPaddle();
           resetBall();
@@ -780,6 +790,7 @@
 
     // --- ステージクリア判定（壊れないブロックを除き、残っているブロックが無い。本編プレイ中だけ判定する） ---
     if (game.state === "playing" && game.bricks.every((b) => !b.alive || b.indestructible)) {
+      game.stageTimes.push(game.stageTime); // クリアした瞬間の経過時間を記録
       game.state = "clear";
       soundClear();
     }
@@ -794,6 +805,45 @@
     const m = Math.floor(totalSec / 60);
     const s = totalSec % 60;
     return m + ":" + String(s).padStart(2, "0");
+  }
+
+  // ==================================================================
+  //  ローカルランキング（localStorage。このブラウザ内だけの自己ベスト一覧）
+  // ==================================================================
+
+  // ステージ別タイムを短い文字列にする（例 "0:23 / 0:41 / 0:55…"）。0件なら "(クリアなし)"
+  function formatStageList(times, max) {
+    if (times.length === 0) return "(クリアなし)";
+    const shown = times.slice(0, max).map(formatTime).join(" / ");
+    return times.length > max ? shown + "…" : shown;
+  }
+
+  // localStorage は file:// や設定によっては使えない環境があるため、失敗しても静かに諦める
+  function loadRanking() {
+    try {
+      const raw = localStorage.getItem(RANKING_STORAGE_KEY);
+      return raw ? JSON.parse(raw) : [];
+    } catch (e) {
+      return [];
+    }
+  }
+
+  function saveRanking(list) {
+    try {
+      localStorage.setItem(RANKING_STORAGE_KEY, JSON.stringify(list));
+    } catch (e) {
+      // 保存できなくてもゲームは続行できるようにする
+    }
+  }
+
+  // ゲームオーバーに遷移した瞬間に1回呼ぶ。今回のプレイをランキングに追加し、上位だけ残す
+  function recordGameOverRanking() {
+    const list = loadRanking();
+    list.push({ score: game.score, stageTimes: [...game.stageTimes] });
+    list.sort((a, b) => b.score - a.score);
+    const top = list.slice(0, CONFIG.rankingMaxEntries);
+    saveRanking(top);
+    game._rankingCache = top;
   }
 
   // ==================================================================
@@ -868,6 +918,31 @@
     ctx.fillStyle = "#9aa4bb";
     ctx.font = "12px system-ui, sans-serif";
     ctx.fillText("↑↓ で変更　スペースで開始　D で戻る", W / 2, H / 2 + 110);
+    ctx.textAlign = "start";
+  }
+
+  // ゲームオーバー画面：今回のステージ別クリアタイムと、ローカル保存のベスト5を表示
+  function drawGameOverStats() {
+    const lines = [];
+    lines.push(["今回のスコア " + game.score + "点（" + (game.stage - 1) + "面クリア）", "#e6e9f0"]);
+    lines.push([formatStageList(game.stageTimes, 6), "#9aa4bb"]);
+    lines.push(["ベスト" + CONFIG.rankingMaxEntries + "（このブラウザ内）", "#ffd166"]);
+    if (game._rankingCache.length === 0) {
+      lines.push(["まだ記録がありません", "#9aa4bb"]);
+    } else {
+      game._rankingCache.forEach((entry, i) => {
+        lines.push([(i + 1) + "位　" + entry.score + "点（" + entry.stageTimes.length + "面）", "#e6e9f0"]);
+        lines.push([formatStageList(entry.stageTimes, 6), "#9aa4bb"]);
+      });
+    }
+    ctx.textAlign = "center";
+    ctx.font = "12px system-ui, sans-serif";
+    let ly = H / 2 + 55;
+    for (const [text, color] of lines) {
+      ctx.fillStyle = color;
+      ctx.fillText(text, W / 2, ly);
+      ly += 15;
+    }
     ctx.textAlign = "start";
   }
 
@@ -988,6 +1063,7 @@
       else drawReadyHint();
     } else if (game.state === "gameover") {
       drawCenterText("ゲームオーバー", "スペースキーでもう一度");
+      drawGameOverStats();
     } else if (game.state === "clear") {
       drawCenterText("ステージクリア！", "スペースキーで次のステージ");
     } else if (game.paused) {
