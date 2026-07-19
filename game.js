@@ -25,7 +25,7 @@
     paddleForwardRatio: 2 / 3, // パドルが前に出られる上限（画面の高さに対する割合。下側1/3まで）
     ballRadius: 8,       // ボールの大きさ（半径）
     ballSpeed: 4.2,      // ボールの基本スピード（ステージが上がると少し速くなる）
-    speedUpPerStage: 0.6,// 1ステージごとに増えるスピード
+    speedUpPerStage: 0.35,// 1ステージごとに増えるスピード（旧0.6。ステージ5以降が急激に難しくなりすぎるため緩和）
     brickRows: 4,        // ブロックの行数（ステージ1のときの基準）
     brickCols: 8,        // ブロックの列数
     brickHeight: 22,     // ブロック1つの高さ
@@ -209,17 +209,37 @@
         });
       }
     }
-    // ステージが十分進んだら、見た目は普通のブロックに紛れ込ませた「壊れないブロック」を混ぜる
+    // ステージが十分進んだら、見た目は普通のブロックに紛れ込ませた「壊れないブロック」を混ぜる。
+    // ただし、壁際の列や、壊れないブロック同士が隣接する場所は選ばない。
+    // すき間（brickGap）はボールの直径より狭いため、壁やもう1つの壊れないブロックとの
+    // 隙間にボールが挟まると、反射がずっと打ち消し合って抜け出せなくなるバグがあったため。
     if (game.stage >= CONFIG.indestructibleStartStage) {
       const count = Math.min(
         game.stage - CONFIG.indestructibleStartStage + 1,
         CONFIG.indestructibleMaxCount,
         game.bricks.length
       );
+      // 両端の列（壁とすぐ隣り合う列）を除いた候補だけを対象にする
+      const candidates = [];
+      for (let r = 0; r < rows; r++) {
+        for (let c = 1; c < cols - 1; c++) {
+          candidates.push(r * cols + c);
+        }
+      }
       const chosen = [];
-      while (chosen.length < count) {
-        const i = Math.floor(Math.random() * game.bricks.length);
-        if (!chosen.includes(i)) chosen.push(i);
+      const tooCloseToChosen = (idx) => {
+        const r1 = Math.floor(idx / cols), c1 = idx % cols;
+        return chosen.some((j) => {
+          const r2 = Math.floor(j / cols), c2 = j % cols;
+          return Math.abs(r1 - r2) <= 1 && Math.abs(c1 - c2) <= 1; // 上下左右斜めに隣接
+        });
+      };
+      // 候補が尽きる／条件を満たせない場合に無限ループしないよう試行回数の上限を設ける
+      let attempts = 0;
+      while (chosen.length < count && attempts < candidates.length * 5 && candidates.length > 0) {
+        attempts++;
+        const idx = candidates[Math.floor(Math.random() * candidates.length)];
+        if (!chosen.includes(idx) && !tooCloseToChosen(idx)) chosen.push(idx);
       }
       for (const i of chosen) game.bricks[i].indestructible = true;
     }
@@ -431,6 +451,12 @@
       ball.x = prevX < rect.x ? rect.x - m : rect.x + rect.w + m;
       ball.y = prevY < rect.y ? rect.y - m : rect.y + rect.h + m;
     }
+
+    // 安全弁: 押し出した結果、画面の外（壁の向こう側）まで出てしまわないようにする。
+    // 壁とこの矩形の隙間がボールの直径より狭い場合に起こり得る「壁⇄矩形で反射がループし続ける」
+    // 不具合を防ぐ（上限側=下は画面外に落ちる「ミス」判定があるので、下方向はクランプしない）。
+    ball.x = Math.max(ball.r, Math.min(W - ball.r, ball.x));
+    ball.y = Math.max(ball.r, ball.y);
   }
 
   // ==================================================================
