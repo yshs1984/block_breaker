@@ -96,6 +96,7 @@
 | ボールの速さ | `ballSpeed` を大きく／小さく |
 | パドルの幅・速さ | `paddleWidth` / `paddleSpeed` |
 | ブロックの数 | `brickRows`（行）/ `brickCols`（列） |
+| ブロックの行数の上限 | `brickMaxRows`（これ以上ステージが進んでも増えない） |
 | 最初の残機 | `startLives` |
 | ステージごとの加速 | `speedUpPerStage` |
 | アイテムの落ちやすさ | `itemDropChance`（0〜1。0.3=30%） |
