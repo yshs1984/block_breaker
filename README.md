@@ -113,8 +113,11 @@
 | フラフラ障害物が出始めるステージ | `floatingObstacleStartStage` |
 | フラフラ障害物の速さ・存在時間・揺れ幅 | `floatingObstacleSpeed` / `floatingObstacleLifeSeconds` / `floatingObstacleBobAmp` |
 | フラフラ障害物の出現間隔（最短〜最長） | `floatingObstacleMinGap` / `floatingObstacleMaxGap` |
+| デバッグ用ステージ選択で選べる最大ステージ | `debugMaxStage` |
 
 ブロックの色は `CONFIG` のすぐ下にある **`BRICK_COLORS`** の配列を書き換えると変わります。
+
+> **開発者向け（デバッグ）**: スタート画面で **D** キーを押すと、開始ステージを選ぶデバッグパネルが出ます（**↑↓** で選択、**スペース**で開始）。ゲーム画面には案内を出していない開発者用の隠し機能で、障害物（ステージ3・5〜）など、ステージが進まないと出ない要素の動作確認に使います。
 
 ## ファイル構成
 

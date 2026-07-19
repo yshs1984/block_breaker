@@ -65,6 +65,9 @@
     floatingObstacleMinGap: 4,      // 消えてから次に出るまでの最短間隔（秒）
     floatingObstacleMaxGap: 9,      // 同、最長間隔（秒）
     floatingObstacleBobAmp: 8,      // 上下にフラフラ揺れる振れ幅（ピクセル）
+
+    // --- デバッグ用 ---
+    debugMaxStage: 20,      // デバッグ用ステージ選択で選べる最大ステージ
   };
 
   // ブロックの色（行ごとに変えると見た目が楽しい）
@@ -111,6 +114,8 @@
     paused: false,   // ポーズ中かどうか
     obstacle: null,        // フラフラ動く障害物（1個だけ存在。null なら非表示）
     obstacleSpawnTimer: 0, // 次に出現するまでの残りフレーム数
+    debugMode: false,      // スタート画面でデバッグ用ステージ選択を表示しているか
+    debugStartStage: 1,    // デバッグ選択中の開始ステージ
     // 以下はチュートリアルモード（tutorial.js）が「プレイヤーが何をしたか」を検知するための
     // 軽量なカウンタ。増えるだけで、他の用途では使わない。
     _paddleBounces: 0,      // パドルでボールを弾いた回数
@@ -227,11 +232,11 @@
     return minFrames + Math.random() * (maxFrames - minFrames);
   }
 
-  // 新しいゲームを最初から始める
-  function startNewGame() {
+  // 新しいゲームを始める（startStage を指定するとそのステージから。デバッグ用ステージ選択で使う）
+  function startNewGame(startStage = 1) {
     game.score = 0;
     game.lives = CONFIG.startLives;
-    game.stage = 1;
+    game.stage = startStage;
     game.stageTime = 0;
     resetPaddle();
     buildBricks();
@@ -284,17 +289,30 @@
     if (e.key === "ArrowDown")  keys.down = true;
     if (e.key === "Shift")      keys.charge = true;
 
+    // デバッグ用ステージ選択（スタート画面かつデバッグ表示中のみ）: ↑↓ で開始ステージを増減
+    if (game.state === "ready" && game.debugMode) {
+      if (e.key === "ArrowUp")   game.debugStartStage = Math.min(CONFIG.debugMaxStage, game.debugStartStage + 1);
+      if (e.key === "ArrowDown") game.debugStartStage = Math.max(1, game.debugStartStage - 1);
+    }
+
     // スペースキー: 状態に応じて「開始」または「リスタート」
     if (e.code === "Space") {
       e.preventDefault();
       ensureAudio(); // 最初の操作で音を有効化
-      if (game.state === "ready" || game.state === "gameover") {
-        startNewGame();
+      if (game.state === "ready") {
+        // デバッグ表示中なら選んだステージから、そうでなければステージ1から
+        startNewGame(game.debugMode ? game.debugStartStage : 1);
+      } else if (game.state === "gameover") {
+        startNewGame(1);
       } else if (game.state === "clear") {
         nextStage();
       } else if (game.state === "tutorial") {
         advanceTutorialInfoStep(); // 説明だけのステップはスペースで次へ（tutorial.js で定義）
       }
+    }
+    // Dキー: スタート画面でデバッグ用ステージ選択の表示をオン/オフ
+    if (e.key === "d" || e.key === "D") {
+      if (game.state === "ready") game.debugMode = !game.debugMode;
     }
     // Pキー: プレイ中・チュートリアル中だけポーズ⇄再開を切り替え
     if (e.key === "p" || e.key === "P") {
@@ -721,6 +739,21 @@
     ctx.textAlign = "start";
   }
 
+  // デバッグ用ステージ選択パネル（スタート画面でDを押すと表示。案内は画面に出さない開発者向け機能）
+  function drawDebugPanel() {
+    ctx.textAlign = "center";
+    ctx.fillStyle = "#ffd166";
+    ctx.font = "bold 15px system-ui, sans-serif";
+    ctx.fillText("デバッグモード", W / 2, H / 2 + 56);
+    ctx.fillStyle = "#e6e9f0";
+    ctx.font = "20px system-ui, sans-serif";
+    ctx.fillText("◀ 開始ステージ " + game.debugStartStage + " ▶", W / 2, H / 2 + 86);
+    ctx.fillStyle = "#9aa4bb";
+    ctx.font = "12px system-ui, sans-serif";
+    ctx.fillText("↑↓ で変更　スペースで開始　D で戻る", W / 2, H / 2 + 110);
+    ctx.textAlign = "start";
+  }
+
   function draw() {
     // 画面をいったんクリア
     ctx.clearRect(0, 0, W, H);
@@ -830,7 +863,8 @@
     // 状態に応じた案内メッセージ
     if (game.state === "ready") {
       drawCenterText("ブロック崩し", "スペースキーで本編スタート");
-      drawReadyHint();
+      if (game.debugMode) drawDebugPanel();
+      else drawReadyHint();
     } else if (game.state === "gameover") {
       drawCenterText("ゲームオーバー", "スペースキーでもう一度");
     } else if (game.state === "clear") {
