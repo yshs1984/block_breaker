@@ -1,6 +1,7 @@
 # ブロック崩し
 
 インストール不要のブロック崩しゲームです。`index.html` / `game.js` / `tutorial.js` の3ファイルだけで完結します。
+背景は星がまたたく宇宙っぽい見た目です。
 
 ## 遊び方
 
@@ -128,6 +129,7 @@
 | フラフラ障害物の出現間隔（最短〜最長） | `floatingObstacleMinGap` / `floatingObstacleMaxGap` |
 | デバッグ用ステージ選択で選べる最大ステージ | `debugMaxStage` |
 | ランキングの保存・表示件数 | `rankingMaxEntries` |
+| 背景の星の数 | `starfieldCount` |
 
 ブロックの色は `CONFIG` のすぐ下にある **`BRICK_COLORS`** の配列を書き換えると変わります。
 
