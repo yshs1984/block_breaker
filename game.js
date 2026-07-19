@@ -525,6 +525,7 @@
     game.particles = game.particles.filter((p) => p.life > 0);
 
     // 効果時間のカウントダウン（毎フレーム1ずつ減らす）
+    const wasHoming = game.timers.homing > 0; // 減算前に「ホーミング中だったか」を記録（切れた瞬間の検出用）
     for (const k in game.timers) {
       if (game.timers[k] > 0) game.timers[k]--;
     }
@@ -604,6 +605,13 @@
         ball.dx = Math.cos(newAngle) * speed;
         ball.dy = Math.sin(newAngle) * speed;
       }
+    } else if (wasHoming) {
+      // ホーミングがちょうど切れた瞬間：ボールの軌道をパドルへ向けて補正する
+      // （真横に近い軌道のまま置き去りにされる／追いつけず落球するのを防ぐ）
+      const speed = Math.hypot(ball.dx, ball.dy);
+      const angle = Math.atan2(pad.y - ball.y, (pad.x + pad.w / 2) - ball.x);
+      ball.dx = Math.cos(angle) * speed;
+      ball.dy = Math.sin(angle) * speed;
     }
 
     // --- ボールを動かす ---
