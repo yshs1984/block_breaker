@@ -27,6 +27,7 @@
     ballSpeed: 4.2,      // ボールの基本スピード（ステージが上がると少し速くなる）
     speedUpPerStage: 0.35,// 1ステージごとに増えるスピード（旧0.6。ステージ5以降が急激に難しくなりすぎるため緩和）
     brickRows: 4,        // ブロックの行数（ステージ1のときの基準）
+    brickMaxRows: 11,    // ブロックの行数の上限（これ以上ステージが進んでも増えない。パドルの前進限界より上に収める）
     brickCols: 8,        // ブロックの列数
     brickHeight: 22,     // ブロック1つの高さ
     brickGap: 6,         // ブロック同士のすき間
@@ -203,7 +204,9 @@
   // ブロックを並べる。ステージが上がると行が増えて難しくなる
   function buildBricks() {
     game.bricks = [];
-    const rows = CONFIG.brickRows + (game.stage - 1); // ステージごとに1行増える
+    // ステージごとに1行増えるが、brickMaxRows で頭打ちにする
+    // （上限が無いと遠いステージでブロックがパドルの可動域まで埋め尽くしてしまうため。Issue #15）
+    const rows = Math.min(CONFIG.brickRows + (game.stage - 1), CONFIG.brickMaxRows);
     const cols = CONFIG.brickCols;
     const gap = CONFIG.brickGap;
     const totalGap = gap * (cols + 1);
