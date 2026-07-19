@@ -111,7 +111,7 @@
 | ↑ | `fastPaddle` | パドルの左右・前後移動速度 ×1.6（`effectSeconds`秒） | 良 |
 | ↓ | `slowPaddle` | パドルの左右・前後移動速度 ×0.6（`effectSeconds`秒） | 悪 |
 | ★ | `star` | 無敵（ミスにならず下端で跳ね返る）＋ボール速度×1.5（`starSeconds`秒） | 良 |
-| ◎ | `homing` | ボールが最も近い生存ブロックへ毎フレーム少しずつ向きを補正（`effectSeconds`秒） | 良 |
+| ◎ | `homing` | ボールが最も近い生存ブロックへ毎フレーム少しずつ向きを補正（`homingSeconds`秒） | 良 |
 
 - `wide`⇄`narrow`、`slow`⇄`fast`、`fastPaddle`⇄`slowPaddle` は反対効果同士で取得時に打ち消し合う
 - 取得音: 良いアイテムは `soundGood`、悪いアイテムは `soundBad`

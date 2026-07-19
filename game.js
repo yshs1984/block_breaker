@@ -40,6 +40,7 @@
     pierceSeconds: 5,    // 貫通アイテムの効果時間（秒）
     bigBallScale: 1.6,   // 大玉アイテムで何倍の大きさになるか
     starSeconds: 6,      // スターアイテム（無敵+加速）の効果時間（秒。強力なので effectSeconds より短め）
+    homingSeconds: 4,    // ホーミングアイテムの効果時間（秒。effectSeconds より短め）
     homingTurnRate: 0.05,// ホーミングアイテム発動中、1フレームで最大何ラジアン曲がれるか（小さいほど緩やか）
 
     // --- 溜め撃ち（パワーヒット）関連 ---
@@ -428,7 +429,7 @@
       case "fastPaddle": game.timers.paddleFast = frames; game.timers.paddleSlow = 0; break; // 反対効果は打ち消す
       case "slowPaddle": game.timers.paddleSlow = frames; game.timers.paddleFast = 0; break;
       case "star":   game.timers.star = CONFIG.starSeconds * 60;         break;
-      case "homing": game.timers.homing = frames;                       break;
+      case "homing": game.timers.homing = CONFIG.homingSeconds * 60;     break;
       case "life":   game.lives++;             break;
       case "bonus":  game.score += 100;        break;
     }

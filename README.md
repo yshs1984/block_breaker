@@ -103,6 +103,7 @@
 | アイテムの落ちる速さ | `itemFallSpeed` |
 | 貫通の効果時間 | `pierceSeconds`（秒） |
 | スター（無敵+加速）の効果時間 | `starSeconds`（秒） |
+| 誘導アイテムの効果時間 | `homingSeconds`（秒） |
 | 誘導アイテムの曲がる速さ | `homingTurnRate`（ラジアン/フレーム。小さいほど緩やか） |
 | 大玉の大きさ | `bigBallScale`（倍率） |
 | 溜め撃ちが満タンになる時間 | `chargeFullSeconds`（秒） |
