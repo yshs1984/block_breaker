@@ -691,6 +691,9 @@
       soundBounce();
       game._paddleBounces++; // チュートリアルなどが「弾けたか」を検知するためのカウンタ
 
+      // 前回のパワーヒットがブロックに当たらないまま戻ってきたら、権利を無効化する（持ち越さない）
+      if (game.powerHits > 0) game.powerHits = 0;
+
       // 反動はボールの実効速度（slow/fast/パワーブーストの倍率も加味）に応じて大きくする
       const impactSpeed = speed * mult;
       const speedRatio = impactSpeed / CONFIG.ballSpeed;
