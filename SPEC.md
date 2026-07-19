@@ -48,7 +48,7 @@
 ## ボール
 
 - 半径 `ballRadius`（既定8）。`big` アイテムの効果中は `bigBallScale` 倍（既定1.6倍）に拡大、当たり判定も連動
-- 基本速度 `ballSpeed`（既定4.2）＋ `(ステージ数-1) × speedUpPerStage`（既定0.35。ステージが上がるほど速くなる。旧既定0.6はステージ5以降の難易度が急上昇しすぎるため緩和した）
+- 基本速度は `min(ballSpeed(既定4.2) + (ステージ数-1) × speedUpPerStage(既定0.35), ballSpeedCap(既定6.65))`。ステージが上がるほど速くなるが、`ballSpeedCap` で頭打ちになる（既定値ではステージ8で到達し、`brickMaxRows` の頭打ちタイミングと揃えている：Issue #19）。旧 `speedUpPerStage` の既定0.6はステージ5以降の難易度が急上昇しすぎるため緩和した。アイテムによる一時的な加速（`fast`/`star`/`powerBoost`）は `mult` 側で別途かかるため、この上限の対象外
 - 移動量には毎フレーム倍率 `mult` がかかる（`dx`/`dy` 自体は変えない）:
   - `slow` 効果中: ×0.6　／　`fast` 効果中: ×1.5　／　`star` 効果中: ×1.5　／　`powerBoost` 中: × `powerBoostMult`（既定1.6）
   - 複数条件が重なる場合は掛け算で合成
