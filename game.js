@@ -736,13 +736,10 @@
     ctx.fillStyle = "#9aa4bb";
     ctx.font = "13px system-ui, sans-serif";
     ctx.fillText("初めてなら T キーでチュートリアル", W / 2, H / 2 + 60);
-    ctx.fillStyle = "#6c7486";
-    ctx.font = "12px system-ui, sans-serif";
-    ctx.fillText("D キー: デバッグ用ステージ選択", W / 2, H / 2 + 84);
     ctx.textAlign = "start";
   }
 
-  // デバッグ用ステージ選択パネル（スタート画面でDを押すと表示）
+  // デバッグ用ステージ選択パネル（スタート画面でDを押すと表示。案内は画面に出さない開発者向け機能）
   function drawDebugPanel() {
     ctx.textAlign = "center";
     ctx.fillStyle = "#ffd166";
