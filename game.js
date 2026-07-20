@@ -86,6 +86,29 @@
 
     // --- コンボ ---
     comboBonusPerHit: 5,    // コンボが1伸びるごとに、その1個の得点に追加される点数
+
+    // --- ボスステージ ---
+    bossStageInterval: 5, // このステージ数ごとにボスステージになる（5, 10, 15...）
+    bossBaseHp: 15,        // 1体目のボスのHP
+    bossHpPerDefeat: 5,    // ボスを倒すたびに次のボスのHPがこれだけ増える
+    bossHpMax: 40,         // ボスHPの上限（際限なく増えて倒せなくならないように）
+    bossSpeed: 2.2,        // ボスの左右移動速度（1体目）
+    bossSpeedPerDefeat: 0.5, // ボスの回が1つ進むごとに左右速度に加算する量
+    bossSpeedCapValue: 4.5,  // ボスの左右速度の上限
+    bossBobAmp: 14,        // ボスの上下の揺れ幅（ピクセル）
+    bossDirChangeMinSeconds: 0.8, // 左右の向きを不規則に変える間隔（最短。単調な壁往復を崩す）
+    bossDirChangeMaxSeconds: 2.5, // 同（最長）
+    bossDiveIntervalMinSeconds: 3, // 下に突っ込むまでの間隔（最短）
+    bossDiveIntervalMaxSeconds: 6, // 同（最長）
+    bossDiveDepth: 150,    // 突っ込むときに下へ降りる距離（ピクセル）
+    bossDiveDurationSeconds: 1.1, // 突っ込んで戻るまでの時間（秒）
+    bossDefeatBonus: 500,  // ボスを倒したときのスコアボーナス
+    bossPowerHitDamage: 3, // パワーヒット中にボスへ当てたときのダメージ（通常は1）
+    bossHitCooldownSeconds: 0.8, // ボスが連続でダメージを受けない最短間隔（上の壁との隙間で往復してHPが激減するのを防ぐ）
+    bossBlockIntervalSeconds: 4, // ボスが新しいブロックを放出する間隔（秒）
+    bossBlockCount: 2,           // 1回の放出で出てくるブロックの数
+    bossBlockMaxOnField: 6,      // 場に残っているブロックがこの数以上あれば、その回の放出はスキップする
+    bossObstacleMaxCount: 3,     // ボス戦で同時に出るフラフラ障害物の数の上限
   };
 
   // ブロックの色（行ごとに変えると見た目が楽しい）
@@ -147,6 +170,8 @@
     powerHits: 0,    // パワーヒットで残り何個、反射せず壊せるか
     paddleRecoil: 0, // パドルがボールを弾いたときの反動（見た目だけの下げ幅）
     combo: 0,        // パドルから離れてから戻るまでの間に連続で壊したブロック数
+    boss: null,      // ボスステージ中だけ存在（{x,y,w,h,hp,maxHp,dx,baseY,bobPhase,flash,hitCooldown}）。null なら非ボスステージ
+    bossObstacles: [], // ボス戦中だけ漂う障害物（回が進むほど増える）。通常ステージの game.obstacle とは別物
     paused: false,   // ポーズ中かどうか
     obstacle: null,        // フラフラ動く障害物（1個だけ存在。null なら非表示）
     obstacleSpawnTimer: 0, // 次に出現するまでの残りフレーム数
@@ -199,6 +224,7 @@
   const soundPower   = () => { beep(300,0.05,"sawtooth"); setTimeout(()=>beep(600,0.1,"sawtooth"),50); }; // パワーヒット発動
   const soundLifeUp  = () => { beep(660,0.1,"triangle"); setTimeout(()=>beep(880,0.12,"triangle"),100); setTimeout(()=>beep(1320,0.18,"triangle"),220); }; // 残機が増えた瞬間（♥アイテム・スコアボーナス共通。気づきやすいよう長めの3音ファンファーレ）
   const soundClang   = () => beep(200, 0.08, "square", 0.08); // 壊れない障害物にぶつかったときの硬い音
+  const soundBossDefeat = () => { beep(392,0.12,"triangle"); setTimeout(()=>beep(523,0.12,"triangle"),120); setTimeout(()=>beep(659,0.12,"triangle"),240); setTimeout(()=>beep(880,0.2,"triangle"),360); }; // ボス撃破（4音の大きめファンファーレ）
 
   // ==================================================================
   //  セットアップ（配置し直す）系の関数
@@ -228,8 +254,102 @@
     game.ball.dy = -speed;
   }
 
-  // ブロックを並べる。ステージが上がると行が増えて難しくなる
+  // このステージがボスステージかどうか（bossStageInterval ごとに true になる）
+  function isBossStage(stage) {
+    return stage % CONFIG.bossStageInterval === 0;
+  }
+
+  // ボスを1体生成する。倒した体数（＝ステージ番号から逆算）が増えるほどHPも増える（上限あり）
+  function createBoss() {
+    const bossNumber = game.stage / CONFIG.bossStageInterval; // 1体目, 2体目...
+    const hp = Math.min(
+      CONFIG.bossBaseHp + (bossNumber - 1) * CONFIG.bossHpPerDefeat,
+      CONFIG.bossHpMax
+    );
+    const w = 180, h = 50;
+    const baseY = 110;
+    // 回が進むほど左右移動が速くなる（上限あり）
+    const speed = Math.min(
+      CONFIG.bossSpeed + (bossNumber - 1) * CONFIG.bossSpeedPerDefeat,
+      CONFIG.bossSpeedCapValue
+    );
+    return {
+      x: (W - w) / 2,
+      y: baseY,
+      baseY,
+      w, h,
+      hp,
+      maxHp: hp,
+      dx: speed,
+      bobPhase: 0,
+      flash: 0, // 被弾直後、白く光らせる残りフレーム数
+      hitCooldown: 0, // ダメージを受けた直後の無敵フレーム（0になるまで次のダメージが入らない）
+      blockSpawnTimer: CONFIG.bossBlockIntervalSeconds * 60, // 次にブロックを放出するまでの残りフレーム数
+      dirTimer: randSecFrames(CONFIG.bossDirChangeMinSeconds, CONFIG.bossDirChangeMaxSeconds), // 次に左右の向きを不規則に変えるまで
+      diveTimer: randSecFrames(CONFIG.bossDiveIntervalMinSeconds, CONFIG.bossDiveIntervalMaxSeconds), // 次に下へ突っ込むまで
+      diving: false, // 今まさに突っ込み中か
+      diveT: 0,      // 突っ込みの進み具合（0→1）
+      diveOffset: 0, // 突っ込みによる下方向のオフセット（ピクセル）
+    };
+  }
+
+  // 秒の範囲からランダムなフレーム数を返す（ボスの不規則な動きのタイマー用）
+  function randSecFrames(minSec, maxSec) {
+    return (minSec + Math.random() * (maxSec - minSec)) * 60;
+  }
+
+  // ボス戦で漂う障害物を count 個つくって返す（各要素はフラフラ障害物と同じ形。寿命は持たず戦闘中ずっと残る）
+  function createBossObstacles(count) {
+    const arr = [];
+    const w = 70, h = 22;
+    for (let i = 0; i < count; i++) {
+      const dir = i % 2 === 0 ? -1 : 1;      // 向きを交互にして重なりにくくする
+      const baseY = H * 0.4 + i * 44;        // 縦位置も少しずつずらす
+      arr.push({
+        x: dir < 0 ? W - w : 0,
+        y: baseY,
+        baseY,
+        w, h,
+        dx: dir * CONFIG.floatingObstacleSpeed,
+        bobPhase: i,                          // 位相もずらしてバラバラに揺らす
+      });
+    }
+    return arr;
+  }
+
+  // ボスが定期的に放出する小さなブロックを bossBlockCount 個、ボスの少し下にランダムな位置で追加する。
+  // 既存の game.bricks に足すだけなので、通常のブロック当たり判定（スコア・コンボ・アイテムドロップ）が
+  // そのまま使える。
+  function spawnBossBlocks() {
+    const boss = game.boss;
+    const bw = 50, bh = 20;
+    for (let i = 0; i < CONFIG.bossBlockCount; i++) {
+      game.bricks.push({
+        x: Math.random() * (W - bw),
+        y: boss.y + boss.h + 20 + Math.random() * 40,
+        w: bw,
+        h: bh,
+        color: "#ff6b6b",
+        alive: true,
+        indestructible: false,
+        revealed: false,
+      });
+    }
+  }
+
+  // ブロックを並べる。ステージが上がると行が増えて難しくなる（ボスステージはブロックの代わりにボスを1体配置する）
   function buildBricks() {
+    if (isBossStage(game.stage)) {
+      game.bricks = [];
+      game.boss = createBoss();
+      // 回が進むほど障害物を増やす（1体目=0個, 2体目=1個, 3体目=2個... 上限あり）
+      const bossNumber = game.stage / CONFIG.bossStageInterval;
+      const obstacleCount = Math.min(bossNumber - 1, CONFIG.bossObstacleMaxCount);
+      game.bossObstacles = createBossObstacles(obstacleCount);
+      return;
+    }
+    game.boss = null;
+    game.bossObstacles = [];
     game.bricks = [];
     // ステージごとに1行増えるが、brickMaxRows で頭打ちにする
     // （上限が無いと遠いステージでブロックがパドルの可動域まで埋め尽くしてしまうため。Issue #15）
@@ -535,6 +655,15 @@
         nearest = b;
       }
     }
+    // ボスステージ中は通常ブロックが無いので、ボスもホーミングの対象にする
+    if (game.boss) {
+      const cx = game.boss.x + game.boss.w / 2, cy = game.boss.y + game.boss.h / 2;
+      const dist = (cx - ball.x) * (cx - ball.x) + (cy - ball.y) * (cy - ball.y);
+      if (dist < nearestDist) {
+        nearestDist = dist;
+        nearest = game.boss;
+      }
+    }
     return nearest;
   }
 
@@ -661,8 +790,8 @@
     // 上の壁で反射
     if (ball.y - ball.r < 0) { ball.y = ball.r; ball.dy *= -1; soundBounce(); }
 
-    // --- フラフラ障害物（ステージが十分進むと出現。壊れない） ---
-    if (game.state === "playing" && game.stage >= CONFIG.floatingObstacleStartStage) {
+    // --- フラフラ障害物（ステージが十分進むと出現。壊れない。ボスステージ中は出現しない） ---
+    if (game.state === "playing" && game.stage >= CONFIG.floatingObstacleStartStage && !game.boss) {
       if (game.obstacle) {
         const ob = game.obstacle;
         // 左右に動き、画面端で跳ね返る
@@ -697,6 +826,100 @@
             life: CONFIG.floatingObstacleLifeSeconds * 60,
           };
         }
+      }
+    }
+
+    // --- ボス（ボスステージ中だけ存在。左右＋上下に動き回り、当てるとHPが減る） ---
+    if (game.boss) {
+      const boss = game.boss;
+
+      // 左右移動。壁で反転するほか、不規則な間隔でも向きをランダムに切り替える
+      // （単調な壁往復だと、たまたまボールと横移動が同期して同じ場所で当たり続けてしまうため）
+      boss.x += boss.dx;
+      if (boss.x < 0) { boss.x = 0; boss.dx *= -1; }
+      if (boss.x + boss.w > W) { boss.x = W - boss.w; boss.dx *= -1; }
+      boss.dirTimer--;
+      if (boss.dirTimer <= 0) {
+        boss.dx = (Math.random() < 0.5 ? -1 : 1) * Math.abs(boss.dx); // 同じ向きに続くこともある＝読みにくい
+        boss.dirTimer = randSecFrames(CONFIG.bossDirChangeMinSeconds, CONFIG.bossDirChangeMaxSeconds);
+      }
+
+      // 上下の揺れ（ゆるいbob）＋ ときどき下へ突っ込む（diveOffset）
+      boss.bobPhase += 0.04;
+      if (boss.diving) {
+        // sin(0→π) で 0→1→0 の山を描き、下に降りてスッと戻る
+        boss.diveT += 1 / (CONFIG.bossDiveDurationSeconds * 60);
+        if (boss.diveT >= 1) {
+          boss.diving = false;
+          boss.diveT = 0;
+          boss.diveOffset = 0;
+          boss.diveTimer = randSecFrames(CONFIG.bossDiveIntervalMinSeconds, CONFIG.bossDiveIntervalMaxSeconds);
+        } else {
+          boss.diveOffset = Math.sin(boss.diveT * Math.PI) * CONFIG.bossDiveDepth;
+        }
+      } else {
+        boss.diveTimer--;
+        if (boss.diveTimer <= 0) { boss.diving = true; boss.diveT = 0; }
+      }
+      boss.y = boss.baseY + Math.sin(boss.bobPhase) * CONFIG.bossBobAmp + boss.diveOffset;
+
+      if (boss.flash > 0) boss.flash--;
+      if (boss.hitCooldown > 0) boss.hitCooldown--;
+
+      // 一定間隔でブロックを放出する（場に残っているブロックが多すぎるときはスキップ）
+      boss.blockSpawnTimer--;
+      if (boss.blockSpawnTimer <= 0) {
+        boss.blockSpawnTimer = CONFIG.bossBlockIntervalSeconds * 60;
+        const aliveCount = game.bricks.filter((b) => b.alive).length;
+        if (aliveCount < CONFIG.bossBlockMaxOnField) spawnBossBlocks();
+      }
+
+      if (circleRectHit(ball, boss)) {
+        // 反射は毎回行うが、ダメージは「無敵時間が切れている」かつ「突っ込み中でない」ときだけ入れる。
+        // ・hitCooldown: 上の壁との隙間で高速往復してHPが一気に減るのを防ぐ
+        // ・diving中は無敵: 突っ込みは攻撃モーションなので、近づいてもタダで削られない（見た目でシールドを出す）
+        if (boss.hitCooldown === 0 && !boss.diving) {
+          boss.hitCooldown = CONFIG.bossHitCooldownSeconds * 60;
+          // パワーヒット中はダメージが増える（1発を無駄にしないよう権利をここで消費する）
+          if (game.powerHits > 0) {
+            boss.hp -= CONFIG.bossPowerHitDamage;
+            game.powerHits--;
+          } else {
+            boss.hp--;
+          }
+          boss.flash = 10;
+          spawnParticles(ball.x, ball.y, "#ff6b6b");
+          soundClang();
+          // 通常のブロックと同じ確率でアイテムを落とす（貫通・パワーヒットを駆使して戦える）
+          if (Math.random() < CONFIG.itemDropChance) {
+            spawnItem(ball.x, ball.y);
+          }
+        }
+        // 壊れないブロックと同じく、貫通・パワーヒット中でも必ず跳ね返す（すり抜けない）。
+        // クールダウン中でも跳ね返りだけは行う。
+        reflectBallOffRect(ball, boss);
+        if (boss.hp <= 0) {
+          game.score += CONFIG.bossDefeatBonus;
+          spawnParticles(boss.x + boss.w / 2, boss.y + boss.h / 2, "#ff6b6b");
+          soundBossDefeat();
+          game.boss = null;
+          game.bossObstacles = []; // クリア画面に障害物が残らないよう片付ける
+          game.stageTimes.push(game.stageTime); // 通常のステージクリアと同様に記録する
+          game.state = "clear";
+        }
+      }
+    }
+
+    // --- ボス戦の障害物（回が進むほど数が増える。ボスを倒すまで漂い続ける） ---
+    for (const ob of game.bossObstacles) {
+      ob.x += ob.dx;
+      if (ob.x < 0) { ob.x = 0; ob.dx *= -1; }
+      if (ob.x + ob.w > W) { ob.x = W - ob.w; ob.dx *= -1; }
+      ob.bobPhase += 0.05;
+      ob.y = ob.baseY + Math.sin(ob.bobPhase) * CONFIG.floatingObstacleBobAmp;
+      if (circleRectHit(ball, ob)) {
+        reflectBallOffRect(ball, ob);
+        soundClang();
       }
     }
 
@@ -825,7 +1048,9 @@
     }
 
     // --- ステージクリア判定（壊れないブロックを除き、残っているブロックが無い。本編プレイ中だけ判定する） ---
-    if (game.state === "playing" && game.bricks.every((b) => !b.alive || b.indestructible)) {
+    // ボスステージ中は game.bricks が空配列（every() が空配列で常に true になる）なので、
+    // ボスを倒すまでこの判定が誤発火しないよう !game.boss を条件に含める。
+    if (game.state === "playing" && !game.boss && game.bricks.every((b) => !b.alive || b.indestructible)) {
       game.stageTimes.push(game.stageTime); // クリアした瞬間の経過時間を記録
       game.state = "clear";
       soundClear();
@@ -895,6 +1120,165 @@
     ctx.arcTo(x, y, x + w, y, r);
     ctx.closePath();
     ctx.fill();
+  }
+
+  // ボス本体を描く（グラデーションの体＋上部のトゲ＋ボールを追う目）。HPバーは呼び出し側で描く。
+  // ボスのギザギザ輪郭を ctx にパスとして引く（本体の塗りとシールドの線で使い回す）。
+  // トゲの長さは固定パターン（毎フレーム乱数だとチラつくため）。上辺・下辺に不揃いなトゲを生やし、
+  // 「軟らかい角丸」ではない禍々しいシルエットにする。
+  const BOSS_TOP_JAGS = [14, 26, 12, 30, 10, 24, 16];    // 上辺のトゲの高さ（左から順）
+  const BOSS_BOTTOM_JAGS = [10, 18, 8, 20, 12, 16, 9];   // 下辺の牙状のトゲの長さ
+  // jagScale はトゲの縮尺（1=ボス本体サイズ基準）。障害物＝子分など小さい体に描くときは
+  // 体の高さに合わせて小さくしないと、トゲだけが体より大きくなってしまうため。
+  function traceBossOutline(rect, jagScale = 1) {
+    const n = BOSS_TOP_JAGS.length;
+    const stepW = rect.w / n;
+    const inset = 6 * jagScale; // 上下の縁の「くびれ」もトゲと同じ縮尺にする
+    ctx.beginPath();
+    // 上辺（左→右へ、山谷を交互に）
+    ctx.moveTo(rect.x, rect.y + inset);
+    for (let i = 0; i < n; i++) {
+      ctx.lineTo(rect.x + stepW * (i + 0.5), rect.y - BOSS_TOP_JAGS[i] * jagScale);
+      ctx.lineTo(rect.x + stepW * (i + 1), rect.y + inset);
+    }
+    // 右辺 → 下辺（右→左へ、下向きの牙）
+    ctx.lineTo(rect.x + rect.w, rect.y + rect.h - inset);
+    for (let i = n - 1; i >= 0; i--) {
+      ctx.lineTo(rect.x + stepW * (i + 0.5), rect.y + rect.h + BOSS_BOTTOM_JAGS[i] * jagScale);
+      ctx.lineTo(rect.x + stepW * i, rect.y + rect.h - inset);
+    }
+    ctx.closePath();
+  }
+
+  // フラフラ障害物を「ボスの子分」らしく描く（ボスと同じギザギザ輪郭の縮小版＋小さな吊り目）。
+  // 色は従来どおり紫系にして、ボス本体（黒＋赤）とは見分けがつくようにする。
+  function drawMinion(ob) {
+    const jagScale = ob.h / 50; // ボス本体（高さ50px）に対する縮尺でトゲも小さくする
+    traceBossOutline(ob, jagScale);
+    const grad = ctx.createLinearGradient(ob.x, ob.y, ob.x, ob.y + ob.h);
+    grad.addColorStop(0, "#241038");   // 上はほぼ黒紫（ボスの「黒い体」と同じ発想）
+    grad.addColorStop(1, "#6c3fc5");   // 下端に従来の紫がにじむ
+    ctx.fillStyle = grad;
+    ctx.shadowColor = "#8f5cf0";
+    ctx.shadowBlur = 8;
+    ctx.fill();
+    ctx.shadowBlur = 0;
+    // 小さな吊り目（ボスの目の簡略版。紫っぽく光る）
+    const eyeY = ob.y + ob.h * 0.45;
+    const mcx = ob.x + ob.w / 2;
+    for (const dir of [-1, 1]) {
+      const ex = mcx + dir * ob.w * 0.2;
+      ctx.fillStyle = "#d9b8ff";
+      ctx.beginPath();
+      ctx.ellipse(ex, eyeY, 4, 1.8, dir * 0.35, 0, Math.PI * 2); // 傾けて「怒り目」に
+      ctx.fill();
+    }
+  }
+
+  function drawBoss(boss) {
+    const flashing = boss.flash > 0;
+    const cx = boss.x + boss.w / 2;
+
+    traceBossOutline(boss);
+
+    // 脈動する赤いオーラ（ゆっくり明滅して「生きている」不気味さを出す）
+    const pulse = 0.5 + 0.5 * Math.sin(Date.now() / 250);
+    ctx.shadowColor = flashing ? "#ffffff" : "#ff0022";
+    ctx.shadowBlur = 18 + pulse * 14;
+
+    // 本体はほぼ黒（黒に近いほど威圧感が出る）。下端だけ血の色がにじむグラデーション
+    const grad = ctx.createLinearGradient(boss.x, boss.y, boss.x, boss.y + boss.h);
+    if (flashing) {
+      grad.addColorStop(0, "#ffffff");
+      grad.addColorStop(1, "#ffd6d6");
+    } else {
+      grad.addColorStop(0, "#1a060e");
+      grad.addColorStop(0.65, "#2b0a16");
+      grad.addColorStop(1, "#7a0d20");
+    }
+    ctx.fillStyle = grad;
+    ctx.fill();
+    ctx.shadowBlur = 0; // 以降の描画に影響しないよう必ず戻す
+
+    // 体の亀裂（マグマのように光る割れ目。ダメージが進むほど赤みが強まる）
+    const damage = 1 - boss.hp / boss.maxHp;
+    ctx.strokeStyle = flashing ? "#ffffff" : `rgba(255, ${Math.floor(60 + 60 * pulse)}, 40, ${0.35 + damage * 0.6})`;
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(cx - boss.w * 0.32, boss.y + boss.h * 0.2);
+    ctx.lineTo(cx - boss.w * 0.22, boss.y + boss.h * 0.55);
+    ctx.lineTo(cx - boss.w * 0.3, boss.y + boss.h * 0.85);
+    ctx.moveTo(cx + boss.w * 0.28, boss.y + boss.h * 0.15);
+    ctx.lineTo(cx + boss.w * 0.34, boss.y + boss.h * 0.5);
+    ctx.lineTo(cx + boss.w * 0.26, boss.y + boss.h * 0.8);
+    ctx.stroke();
+    ctx.lineWidth = 1;
+
+    // 目（血の色に光る三角の吊り目。shadowBlurで発光させ、ボール方向をにらむ）
+    const eyeY = boss.y + boss.h * 0.38;
+    const eyeOffsetX = boss.w * 0.2;
+    for (const dir of [-1, 1]) {
+      const ex = cx + dir * eyeOffsetX;
+      const eyeDx = Math.max(-3, Math.min(3, (game.ball.x - ex) / 25));
+      ctx.shadowColor = "#ff2200";
+      ctx.shadowBlur = 12 + pulse * 8;
+      ctx.fillStyle = flashing ? "#ffffff" : "#ff2a1a";
+      // 外側が高く、中央に向かって鋭く落ちる三角形＝にらみつける形
+      ctx.beginPath();
+      ctx.moveTo(ex + eyeDx + dir * 14, eyeY - 9);
+      ctx.lineTo(ex + eyeDx - dir * 12, eyeY + 1);
+      ctx.lineTo(ex + eyeDx + dir * 10, eyeY + 5);
+      ctx.closePath();
+      ctx.fill();
+      ctx.shadowBlur = 0;
+    }
+
+    // 口（暗い裂け目＋ギザギザの白い牙。笑っているようで笑っていない不気味な形）
+    const mouthY = boss.y + boss.h * 0.66;
+    const mouthW = boss.w * 0.56;
+    const mouthH = boss.h * 0.26;
+    ctx.fillStyle = flashing ? "#ffd6d6" : "#0a0206";
+    ctx.beginPath();
+    ctx.moveTo(cx - mouthW / 2, mouthY);
+    ctx.quadraticCurveTo(cx, mouthY + mouthH * 1.6, cx + mouthW / 2, mouthY);
+    ctx.quadraticCurveTo(cx, mouthY + mouthH * 0.5, cx - mouthW / 2, mouthY);
+    ctx.closePath();
+    ctx.fill();
+    // 牙（上あごから下向きに生える鋭い三角形）
+    ctx.fillStyle = flashing ? "#ffffff" : "#e8e0d8";
+    const fangCount = 6;
+    for (let i = 0; i < fangCount; i++) {
+      const fx = cx - mouthW / 2 + mouthW * ((i + 0.5) / fangCount);
+      // 口の上側の縁の高さに合わせて牙の付け根を置く
+      const t = (fx - (cx - mouthW / 2)) / mouthW;             // 口の左端からの割合 0〜1
+      const edgeY = mouthY + mouthH * 0.5 * 4 * t * (1 - t) * 0.5; // 下弧のだいたいの縁
+      ctx.beginPath();
+      ctx.moveTo(fx - 4, edgeY);
+      ctx.lineTo(fx + 4, edgeY);
+      ctx.lineTo(fx, edgeY + 9 + (i % 2) * 4); // 牙の長さを交互に変えて不揃いにする
+      ctx.closePath();
+      ctx.fill();
+    }
+
+    // 突っ込み中はシールドを表示（この間は無敵＝当ててもダメージが入らないことを伝える）。
+    // ただの楕円ではなく、ボスのギザギザ輪郭を一回り大きくなぞって「体を包むバリア」に見せる。
+    if (boss.diving) {
+      const shieldPulse = 0.5 + 0.5 * Math.sin(Date.now() / 80);
+      const bossCy = boss.y + boss.h / 2;
+      const scale = 1.14 + shieldPulse * 0.05; // 脈動で少し伸縮
+      ctx.save();
+      // ボス中心を基準に輪郭を拡大してなぞる（ギザギザのシルエットのまま一回り大きくなる）
+      ctx.translate(cx, bossCy);
+      ctx.scale(scale, scale);
+      ctx.translate(-cx, -bossCy);
+      traceBossOutline(boss);
+      ctx.strokeStyle = `rgba(120, 210, 255, ${0.55 + shieldPulse * 0.35})`;
+      ctx.lineWidth = 2.5 / scale; // 拡大の影響を打ち消して線幅を一定に見せる
+      ctx.shadowColor = "#78d2ff";
+      ctx.shadowBlur = 14 + shieldPulse * 10;
+      ctx.stroke();
+      ctx.restore();
+    }
   }
 
   function drawCenterText(lines, sub) {
@@ -1016,9 +1400,26 @@
       drawRoundRect(b.x, b.y, b.w, b.h, 4, color);
     }
 
-    // フラフラ障害物（壊れない。存在感のある色で表示）
+    // フラフラ障害物（壊れない。ボスの子分のような縮小版シルエットで描く）
     if (game.obstacle) {
-      drawRoundRect(game.obstacle.x, game.obstacle.y, game.obstacle.w, game.obstacle.h, 6, "#6c3fc5");
+      drawMinion(game.obstacle);
+    }
+
+    // ボス戦の障害物（同じく子分の見た目）
+    for (const ob of game.bossObstacles) {
+      drawMinion(ob);
+    }
+
+    // ボス（ボスステージのみ。被弾直後は白く光り、少し上にHPバーを表示）
+    if (game.boss) {
+      const boss = game.boss;
+      drawBoss(boss);
+      const hpBarW = boss.w, hpBarH = 8;
+      const hpx = boss.x, hpy = boss.y - 16;
+      ctx.fillStyle = "rgba(255,255,255,0.15)";
+      ctx.fillRect(hpx, hpy, hpBarW, hpBarH);
+      ctx.fillStyle = "#ff6b6b";
+      ctx.fillRect(hpx, hpy, hpBarW * (boss.hp / boss.maxHp), hpBarH);
     }
 
     // エフェクトの粒

@@ -55,7 +55,7 @@
   - 複数条件が重なる場合は掛け算で合成
 - 壁（左右・上）で反射、パドルで反射
 - パドル反射: 当たった位置に応じて反射角が変わる（中心なら垂直、端に行くほど最大60度まで曲がる）。反射後の速さは直前の速さを維持
-- **ホーミング（`homing` タイマー中）**: 移動量の計算より前に、`findNearestBrick()`（生存かつ `indestructible` でないブロックのうち最も近いもの。無ければ何もしない）へ向けて進行方向を補正する。現在角度と目標角度の差を `±homingTurnRate`（既定0.05ラジアン/フレーム）でクランプして少しずつ回転させ、速度の大きさ（`Math.hypot(dx,dy)`）は変えない。壁・パドル・ブロックへの反射は既存のまま（反射後、次のフレームからまた誘導が再開する）
+- **ホーミング（`homing` タイマー中）**: 移動量の計算より前に、`findNearestBrick()`（生存かつ `indestructible` でないブロックのうち最も近いもの。**ボスステージ中は `game.boss` も対象に含める**（Issue #28のフォローアップ。`game.bricks` が空のボスステージでホーミングが無効化されないようにするため）。対象が無ければ何もしない）へ向けて進行方向を補正する。現在角度と目標角度の差を `±homingTurnRate`（既定0.05ラジアン/フレーム）でクランプして少しずつ回転させ、速度の大きさ（`Math.hypot(dx,dy)`）は変えない。壁・パドル・ブロックへの反射は既存のまま（反射後、次のフレームからまた誘導が再開する）
 - **ホーミング終了時の軌道補正（Issue #18）**: `homing` タイマーが1→0になった瞬間（減算前の値を `wasHoming` として記録し、減算後に0ならその1フレームだけ発火）、ボールの向きをパドルの現在位置（`pad.x + pad.w/2, pad.y`）へ向けて1回だけ補正する（速さは変えない）。ホーミング中は目標ブロックの位置によっては軌道がほぼ真横になり得るため、効果終了後にそのまま真横の軌道で取り残されたり、パドルから見て捕りにくい位置に飛んでいってしまうのを防ぐための補正
 - **スター（`star` タイマー中）**: 画面下端 (`ball.y - ball.r > H`) に達しても `playing` 中のミス処理を行わず、下の壁と同じ要領で跳ね返す（`ball.y = H - ball.r; ball.dy *= -1;`）。ボールの塗り色も金色 `#ffd60a` に変わる（通常は白）
 
@@ -77,7 +77,30 @@
 - 存在する間: `dx`（`floatingObstacleSpeed`、既定1.8）で左右移動し、画面端で反転。`bobPhase` を毎フレーム進めて `y = baseY + sin(bobPhase) * floatingObstacleBobAmp` で上下にも揺れる（「フラフラ」感）。`life`（`floatingObstacleLifeSeconds * 60`、既定7秒ぶんのフレーム）を毎フレーム減らし、0以下で消滅して `game.obstacleSpawnTimer` を `randomObstacleGap()`（`floatingObstacleMinGap`〜`floatingObstacleMaxGap` 秒のランダム値）で再セットする
 - ボールとの当たり判定は `reflectBallOffRect()`（当たった辺に応じて反転＋外側へ押し出し）。**壊れず、`life` が尽きるまで何度当たっても消えない**。専用の `soundClang` を鳴らす
 - `startNewGame()` / `nextStage()` で `game.obstacle = null` にリセットし、`obstacleSpawnTimer` を新しい乱数で再セットする（ステージ間・新規ゲームで持ち越さない）
-- 描画色は紫 `#6c3fc5`
+- 描画（`drawMinion()`）: ボスの子分らしく、ボスと同じギザギザ輪郭（`traceBossOutline()`。高さ比 `ob.h/50` で縮小）を紫系グラデーション（`#241038`→`#6c3fc5`）で塗り、小さな吊り目を2つ添える。単なる紫の角丸ではなく、ボスの縮小版シルエットにして統一感を出している。
+
+## ボスステージ（`game.boss`、Issue #28）
+
+- `isBossStage(stage)` は `stage % bossStageInterval === 0`（既定5。ステージ5, 10, 15…）で判定する。
+- `buildBricks()` はボスステージのとき通常のブロック配置ロジックを実行せず、`game.bricks = []` にした上で `createBoss()` を1体だけ生成して `game.boss` にセットする（通常ステージでは `game.boss = null`）。
+- `createBoss()`: サイズ180×50px、画面上部中央（`y=110`固定、`bobPhase`で上下に揺れる）に生成。HPは `bossNumber = stage / bossStageInterval`（1体目, 2体目…）から `min(bossBaseHp + (bossNumber-1) * bossHpPerDefeat, bossHpMax)`（既定: 15, +5ずつ, 上限40）で決める。
+- 移動: `dx` は `createBoss()` で `min(bossSpeed + (bossNumber-1) * bossSpeedPerDefeat, bossSpeedCapValue)`（既定: 2.2 + 0.5ずつ, 上限4.5）で決める＝**回が進むほど左右移動が速くなる**。画面端で反転するほか、`dirTimer`（`bossDirChangeMinSeconds`〜`bossDirChangeMaxSeconds` 秒のランダム）が切れるたびに向きをランダムに切り替える（`Math.random()<0.5` で符号を決める＝同じ向きが続くこともあり読みにくい。速さの絶対値は不変）。上下は `bobPhase` によるゆるい揺れ（`y = baseY + sin(bobPhase) * bossBobAmp`, 既定14px）に加え、`diveTimer`（`bossDiveIntervalMin〜MaxSeconds` 秒）が切れると**下へ突っ込む**: `diving=true` の間 `diveT` を `1/(bossDiveDurationSeconds*60)` ずつ進め、`diveOffset = sin(diveT*π) * bossDiveDepth`（既定150px）で 0→最大→0 の山を描いて下降・帰還する。突っ込みが終わると次の `diveTimer` を再セット。最終的な `y = baseY + bob + diveOffset`。単調な壁往復だとボールと横移動が同期して同じ場所で当たり続けてしまうため、この不規則化を入れている（Issue #28のフォローアップ）。
+- 被弾: `circleRectHit(ball, boss)` で命中したとき、**`boss.hitCooldown === 0`（無敵時間が切れている）かつ `!boss.diving`（突っ込み中でない）ときだけ**ダメージ処理を行う（突っ込み中は攻撃モーションなので無敵。`drawBoss()` でボスの輪郭に沿った青いシールドを出してテレグラフする）: `game.powerHits > 0`（パワーヒット中）なら `hp -= bossPowerHitDamage`（既定3）・`game.powerHits--`、そうでなければ `hp--`（通常1ダメージ）。あわせて `hitCooldown = bossHitCooldownSeconds * 60`（既定0.8秒）・`flash=10`（描画を10フレーム白くする演出用カウンタ）・`spawnParticles()`・`soundClang()`・アイテムドロップ抽選（`itemDropChance`）。**反射（`reflectBallOffRect()`）はクールダウン中でも毎回行う**（壊れないブロックと同じく貫通・パワーヒット中でもすり抜けない）。この無敵時間は、ボスと上の壁の隙間（ボス `y≈110`, 上壁 `y=0`）にボールが挟まって高速往復し、HPが一気に削られてしまう問題への対策（Issue #28のフォローアップ）。パワーヒットは「多く貫通できる」のではなく「1発の威力が上がる」形でボス戦に活きる。
+- 撃破（`hp <= 0`）: `game.score += bossDefeatBonus`（既定500）、撃破エフェクト・`soundBossDefeat()`、`game.boss = null`、`game.bossObstacles = []`（後述の障害物を片付ける）、`game.stageTimes.push(game.stageTime)`（通常のステージクリアと同じ記録）、`game.state = "clear"` に遷移（以降はスペースキーで `nextStage()` へ、既存の流れと同じ）。
+- **ボス戦の障害物（`game.bossObstacles`）**: 通常ステージの `game.obstacle`（単数・時間で消える）とは別の、ボス戦専用の**複数持てる常設障害物**。`buildBricks()` のボスステージ分岐で `createBossObstacles(count)` により生成する。`count = min(bossNumber - 1, bossObstacleMaxCount)`（既定上限3）＝ステージ5で0個、10で1個、15で2個…と回が進むほど増える。各要素はフラフラ障害物と同じ形（70×22px、`drawMinion()` で描く子分の見た目）だが**寿命を持たずボスを倒すまで漂い続ける**（初期位置・向き・`baseY`・位相を要素ごとにずらして重なりにくくする）。`update()` で左右移動＋上下の揺れをし、`circleRectHit` でボールに当たれば `reflectBallOffRect()`＋`soundClang()`。`buildBricks()` が唯一の生成元なので `startNewGame()`/`nextStage()` は自動的に正しくリセットされる（通常ステージ分岐で `[]` にする）。
+- ボスステージ中は通常のフラフラ障害物（`game.obstacle`）は出現させない（`game.stage >= floatingObstacleStartStage` の判定に `&& !game.boss` を追加）。ボス戦の障害物は上記の別系統。
+- **注意点**: 通常の「ステージクリア判定」（`game.bricks.every(...)`）は、ボスステージでは `game.bricks` が空配列のため `every()` が常に `true` を返してしまう（空配列の仕様）。誤発火を防ぐため、この判定に `&& !game.boss` を追加している。
+- 画面表示（`drawBoss()`）: 「怖さ」重視のデザイン。
+  - **シルエット**: 上辺・下辺ともに不揃いなギザギザのトゲを生やした多角形（トゲの長さは固定配列。毎フレーム乱数だとチラつくため）。角丸矩形は使わない。
+  - **本体色**: ほぼ黒のグラデーション（`#1a060e`→`#2b0a16`→下端だけ血の色 `#7a0d20`）。被弾フラッシュ中は白系。
+  - **オーラ**: `ctx.shadowBlur` による赤いグロー（`#ff0022`）を `sin(Date.now()/250)` でゆっくり脈動させる。
+  - **亀裂**: 体の左右にマグマ状に光る割れ目を線で描く。透明度が `1 - hp/maxHp`（ダメージ率）に連動し、削るほど赤く光る。
+  - **目**: 血の色（`#ff2a1a`）に発光（`shadowBlur`）する三角形の吊り目。外側が高く中央へ鋭く落ちる形で、`game.ball` のx座標へ向けて最大±3px動く。
+  - **口**: 暗い裂け目（2本の二次曲線で囲んだ三日月形）＋上あごから下向きに生える不揃いな白い牙6本。
+  - **シールド**: `boss.diving` の間だけ、ボスの輪郭（`traceBossOutline()`。本体の塗りと共用のギザギザのパス）をボス中心基準に約1.14倍に拡大してなぞり、青い線（`#78d2ff`、`shadowBlur`で発光・脈動）で描く＝体を包むバリアに見せる無敵中テレグラフ。楕円ではなくボスのシルエットに沿った形。
+  - 当たり判定は従来どおり `boss.x/y/w/h` の矩形のまま（トゲ・オーラ・シールドは見た目だけ）。ボスの少し上にHPバー（`hp / maxHp` の割合で塗る）を表示する。
+- **ブロックの放出**: `boss.blockSpawnTimer`（`createBoss()` で `bossBlockIntervalSeconds * 60`、既定4秒ぶんのフレームに初期化）を毎フレーム1減らし、0以下になったら `bossBlockIntervalSeconds * 60` で再セットし、`game.bricks` 内の生存ブロック数が `bossBlockMaxOnField`（既定6）未満なら `spawnBossBlocks()` を呼ぶ。`spawnBossBlocks()` は `bossBlockCount`（既定2）個のブロック（50×20px、色 `#ff6b6b`、`indestructible: false`）をボスの少し下（`boss.y + boss.h + 20〜60`）のランダムなx位置に `game.bricks` へ追加するだけの単純な関数。放出後のブロックは通常の「ブロックとの当たり判定」ループでそのまま処理されるため、スコア加算・コンボ・アイテムドロップ・破壊音などは既存ロジックを何も変更せずにそのまま適用される。
+- **ホーミングとの連携**: `findNearestBrick()` は `game.bricks` を見た後、`game.boss` が存在すればそれも候補に含める（ボスステージ中は `game.bricks` が最初は空のため、ボスが無ければホーミングアイテムの対象が無くなってしまう）。ボスが放出したブロックが場にある場合は、通常どおり距離比較でどちらか近い方が選ばれる。
 
 ## スコア・残機・ステージ
 
