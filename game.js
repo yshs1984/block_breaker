@@ -1023,6 +1023,53 @@
     ctx.fill();
   }
 
+  // ボス本体を描く（グラデーションの体＋上部のトゲ＋ボールを追う目）。HPバーは呼び出し側で描く。
+  function drawBoss(boss) {
+    const flashing = boss.flash > 0;
+
+    // 本体（上から下にグラデーションをかけて立体感を出す）
+    const grad = ctx.createLinearGradient(boss.x, boss.y, boss.x, boss.y + boss.h);
+    if (flashing) {
+      grad.addColorStop(0, "#ffffff");
+      grad.addColorStop(1, "#ffd6d6");
+    } else {
+      grad.addColorStop(0, "#b23a55");
+      grad.addColorStop(1, "#6e1530");
+    }
+    drawRoundRect(boss.x, boss.y, boss.w, boss.h, 14, grad);
+
+    // 上部のトゲトゲ（三角形を並べて「モンスターらしさ」を出す）
+    ctx.fillStyle = flashing ? "#ffffff" : "#4a0e22";
+    const spikeCount = 5;
+    const spikeW = boss.w / spikeCount;
+    for (let i = 0; i < spikeCount; i++) {
+      const sx = boss.x + i * spikeW;
+      ctx.beginPath();
+      ctx.moveTo(sx, boss.y);
+      ctx.lineTo(sx + spikeW / 2, boss.y - 10);
+      ctx.lineTo(sx + spikeW, boss.y);
+      ctx.closePath();
+      ctx.fill();
+    }
+
+    // 目（ボールの方向へ瞳がわずかに動く。生きている感じを出す）
+    const eyeY = boss.y + boss.h * 0.4;
+    const eyeOffsetX = boss.w * 0.22;
+    for (const dir of [-1, 1]) {
+      const ex = boss.x + boss.w / 2 + dir * eyeOffsetX;
+      ctx.fillStyle = "#fff8f0";
+      ctx.beginPath();
+      ctx.arc(ex, eyeY, 9, 0, Math.PI * 2);
+      ctx.fill();
+      const pupilDx = Math.max(-3, Math.min(3, (game.ball.x - ex) / 20));
+      const pupilDy = Math.max(-3, Math.min(3, (game.ball.y - eyeY) / 20));
+      ctx.fillStyle = "#1a1020";
+      ctx.beginPath();
+      ctx.arc(ex + pupilDx, eyeY + pupilDy, 4, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+
   function drawCenterText(lines, sub) {
     ctx.textAlign = "center";
     ctx.fillStyle = "#ffffff";
@@ -1150,7 +1197,7 @@
     // ボス（ボスステージのみ。被弾直後は白く光り、少し上にHPバーを表示）
     if (game.boss) {
       const boss = game.boss;
-      drawRoundRect(boss.x, boss.y, boss.w, boss.h, 10, boss.flash > 0 ? "#ffffff" : "#8b1e3f");
+      drawBoss(boss);
       const hpBarW = boss.w, hpBarH = 8;
       const hpx = boss.x, hpy = boss.y - 16;
       ctx.fillStyle = "rgba(255,255,255,0.15)";
