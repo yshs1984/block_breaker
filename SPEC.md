@@ -172,7 +172,7 @@
 - チャージが `chargeThreshold`（既定0.6）以上の状態でボールがパドルに当たると発動:
   - `powerHits = powerBrickCount`（既定2）… この回数ぶん、ブロックを貫通と同じ要領で反射せず連続破壊（1個壊すごとに残数-1、0になったら通常反射に戻る）
   - `powerBoost` タイマー開始（`powerBoostSeconds`秒、既定0.4秒）… その間ボール移動量が `powerBoostMult`（既定1.6）倍
-  - `powerCooldown` タイマー開始（`powerCooldownSeconds`秒、既定10秒）… 発動から解除されるまで次のパワーヒットは溜められない
+  - `powerCooldown` タイマー開始（`powerCooldownSeconds`秒、既定5秒。旧10秒は爽快感に欠けるとのフィードバックを受けて短縮：Issue #40）… 発動から解除されるまで次のパワーヒットは溜められない
   - パドル中央からパワーヒット用パーティクル（赤）を発生、専用効果音 `soundPower`
 - チャージは発動の有無にかかわらず、パドルに当たった時点で必ず0にリセットされる
 
