@@ -96,6 +96,9 @@
     bossBobAmp: 14,        // ボスの上下の揺れ幅（ピクセル）
     bossDefeatBonus: 500,  // ボスを倒したときのスコアボーナス
     bossPowerHitDamage: 3, // パワーヒット中にボスへ当てたときのダメージ（通常は1）
+    bossBlockIntervalSeconds: 4, // ボスが新しいブロックを放出する間隔（秒）
+    bossBlockCount: 2,           // 1回の放出で出てくるブロックの数
+    bossBlockMaxOnField: 6,      // 場に残っているブロックがこの数以上あれば、その回の放出はスキップする
   };
 
   // ブロックの色（行ごとに変えると見た目が楽しい）
@@ -264,7 +267,28 @@
       dx: CONFIG.bossSpeed,
       bobPhase: 0,
       flash: 0, // 被弾直後、白く光らせる残りフレーム数
+      blockSpawnTimer: CONFIG.bossBlockIntervalSeconds * 60, // 次にブロックを放出するまでの残りフレーム数
     };
+  }
+
+  // ボスが定期的に放出する小さなブロックを bossBlockCount 個、ボスの少し下にランダムな位置で追加する。
+  // 既存の game.bricks に足すだけなので、通常のブロック当たり判定（スコア・コンボ・アイテムドロップ）が
+  // そのまま使える。
+  function spawnBossBlocks() {
+    const boss = game.boss;
+    const bw = 50, bh = 20;
+    for (let i = 0; i < CONFIG.bossBlockCount; i++) {
+      game.bricks.push({
+        x: Math.random() * (W - bw),
+        y: boss.y + boss.h + 20 + Math.random() * 40,
+        w: bw,
+        h: bh,
+        color: "#ff6b6b",
+        alive: true,
+        indestructible: false,
+        revealed: false,
+      });
+    }
   }
 
   // ブロックを並べる。ステージが上がると行が増えて難しくなる（ボスステージはブロックの代わりにボスを1体配置する）
@@ -763,6 +787,15 @@
       boss.bobPhase += 0.04;
       boss.y = boss.baseY + Math.sin(boss.bobPhase) * CONFIG.bossBobAmp;
       if (boss.flash > 0) boss.flash--;
+
+      // 一定間隔でブロックを放出する（場に残っているブロックが多すぎるときはスキップ）
+      boss.blockSpawnTimer--;
+      if (boss.blockSpawnTimer <= 0) {
+        boss.blockSpawnTimer = CONFIG.bossBlockIntervalSeconds * 60;
+        const aliveCount = game.bricks.filter((b) => b.alive).length;
+        if (aliveCount < CONFIG.bossBlockMaxOnField) spawnBossBlocks();
+      }
+
       if (circleRectHit(ball, boss)) {
         // パワーヒット中はダメージが増える（1発を無駄にしないよう権利をここで消費する）
         if (game.powerHits > 0) {
