@@ -190,6 +190,7 @@
   const soundGood    = () => { beep(880,0.08,"triangle"); setTimeout(()=>beep(1174,0.1,"triangle"),80); }; // 良いアイテム
   const soundBad     = () => beep(120, 0.2, "sawtooth");  // 悪いアイテム（低い音）
   const soundPower   = () => { beep(300,0.05,"sawtooth"); setTimeout(()=>beep(600,0.1,"sawtooth"),50); }; // パワーヒット発動
+  const soundLifeUp  = () => { beep(660,0.1,"triangle"); setTimeout(()=>beep(880,0.12,"triangle"),100); setTimeout(()=>beep(1320,0.18,"triangle"),220); }; // 残機が増えた瞬間（♥アイテム・スコアボーナス共通。気づきやすいよう長めの3音ファンファーレ）
   const soundClang   = () => beep(200, 0.08, "square", 0.08); // 壊れない障害物にぶつかったときの硬い音
 
   // ==================================================================
@@ -457,8 +458,10 @@
       case "life":   game.lives++;             break;
       case "bonus":  game.score += 100;        break;
     }
-    // 良い/悪いで効果音を変える
-    if (ITEM_TYPES[type].good) soundGood(); else soundBad();
+    // 良い/悪いで効果音を変える（残機が増える life だけは専用の音にする）
+    if (type === "life") soundLifeUp();
+    else if (ITEM_TYPES[type].good) soundGood();
+    else soundBad();
   }
 
   // ==================================================================
@@ -801,7 +804,7 @@
       while (game.score >= game._lifeBonusNextScore) {
         game.lives++;
         game._lifeBonusNextScore += CONFIG.lifeBonusScore;
-        soundGood(); // ♥アイテムと同じ「良いことが起きた」音を流用
+        soundLifeUp(); // 残機が増えたことに気づきやすい専用の音（♥アイテム取得時と共通）
       }
     }
 
