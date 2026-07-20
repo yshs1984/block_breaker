@@ -78,6 +78,9 @@
     // --- ランキング ---
     rankingMaxEntries: 5,   // ランキングの保存・表示件数
 
+    // --- スコアによる残機ボーナス ---
+    lifeBonusScore: 1000,   // このスコアに達するたびに残機+1（超えた分は繰り越さず、単純に閾値を超えたかで判定する）
+
     // --- 背景 ---
     starfieldCount: 70,     // 背景の星の数
   };
@@ -126,6 +129,7 @@
     stageTime: 0,    // 今のステージの経過フレーム数（表示は formatTime() で M:SS に変換）
     stageTimes: [],  // このプレイでクリアした各ステージの所要フレーム数（クリアした順）
     _rankingCache: [], // gameover 遷移時に読み込んだランキングを draw() で使い回すキャッシュ
+    _lifeBonusNextScore: 1000, // 次に残機+1になるスコアのライン（startNewGame()で lifeBonusScore にリセット）
     paddle: { x: 0, y: 0, w: 0, h: 0 },
     ball: { x: 0, y: 0, dx: 0, dy: 0, r: CONFIG.ballRadius },
     bricks: [],      // ブロックの配列（1つ = {x, y, w, h, color, alive}）
@@ -189,6 +193,7 @@
   const soundGood    = () => { beep(880,0.08,"triangle"); setTimeout(()=>beep(1174,0.1,"triangle"),80); }; // 良いアイテム
   const soundBad     = () => beep(120, 0.2, "sawtooth");  // 悪いアイテム（低い音）
   const soundPower   = () => { beep(300,0.05,"sawtooth"); setTimeout(()=>beep(600,0.1,"sawtooth"),50); }; // パワーヒット発動
+  const soundLifeUp  = () => { beep(660,0.1,"triangle"); setTimeout(()=>beep(880,0.12,"triangle"),100); setTimeout(()=>beep(1320,0.18,"triangle"),220); }; // 残機が増えた瞬間（♥アイテム・スコアボーナス共通。気づきやすいよう長めの3音ファンファーレ）
   const soundClang   = () => beep(200, 0.08, "square", 0.08); // 壊れない障害物にぶつかったときの硬い音
 
   // ==================================================================
@@ -291,6 +296,7 @@
   function startNewGame(startStage = 1) {
     game.score = 0;
     game.lives = CONFIG.startLives;
+    game._lifeBonusNextScore = CONFIG.lifeBonusScore;
     game.stage = startStage;
     game.stageTime = 0;
     game.stageTimes = [];
@@ -455,8 +461,10 @@
       case "life":   game.lives++;             break;
       case "bonus":  game.score += 100;        break;
     }
-    // 良い/悪いで効果音を変える
-    if (ITEM_TYPES[type].good) soundGood(); else soundBad();
+    // 良い/悪いで効果音を変える（残機が増える life だけは専用の音にする）
+    if (type === "life") soundLifeUp();
+    else if (ITEM_TYPES[type].good) soundGood();
+    else soundBad();
   }
 
   // ==================================================================
@@ -791,6 +799,15 @@
       } else if (game.state === "tutorial") {
         // 練習中はボールを落としても失敗にならない。パドル上に戻すだけ
         resetBall();
+      }
+    }
+
+    // --- スコアに応じた残機ボーナス（同一フレームで複数回線を越えても取りこぼさないよう while で判定） ---
+    if (game.state === "playing") {
+      while (game.score >= game._lifeBonusNextScore) {
+        game.lives++;
+        game._lifeBonusNextScore += CONFIG.lifeBonusScore;
+        soundLifeUp(); // 残機が増えたことに気づきやすい専用の音（♥アイテム取得時と共通）
       }
     }
 
