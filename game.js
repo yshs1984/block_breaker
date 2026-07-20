@@ -65,6 +65,7 @@
     indestructibleStartStage: 3,    // このステージ数から「壊れないブロック」が普通のブロックに紛れ始める
     indestructibleMaxCount: 10,     // 壊れないブロックの上限数
     indestructibleStagesPerStep: 2, // この数のステージが経つごとに1個増える（貫通・速い球への対策）
+    indestructibleHitsToBreak: 3,   // 「壊れないブロック」も、この回数当たると砕ける（配置によっては永久にループするバグがあったため）
     floatingObstacleStartStage: 5,  // このステージ数から「フラフラ障害物」が出現し始める
     floatingObstacleSpeed: 1.8,     // 左右に動く速さ
     floatingObstacleLifeSeconds: 7, // 1回の出現で存在し続ける時間（秒）
@@ -405,7 +406,10 @@
         const idx = candidates[Math.floor(Math.random() * candidates.length)];
         if (!chosen.includes(idx) && !tooCloseToChosen(idx)) chosen.push(idx);
       }
-      for (const i of chosen) game.bricks[i].indestructible = true;
+      for (const i of chosen) {
+        game.bricks[i].indestructible = true;
+        game.bricks[i].hitsRemaining = CONFIG.indestructibleHitsToBreak;
+      }
     }
   }
 
@@ -965,11 +969,31 @@
       if (!b.alive) continue;
       if (circleRectHit(ball, b)) {
         // 壊れないブロック：見た目は普通のブロックと同じだったが、当たると正体を現す（灰色）。
-        // 消えることはなく、貫通・パワーヒット中でも無視されず必ず跳ね返す。
+        // 貫通・パワーヒット中でも無視されず必ず跳ね返す。ただし永久に壊れないわけではなく、
+        // indestructibleHitsToBreak 回（既定3）当たると普通のブロックと同じように砕ける
+        // （壊れないブロック同士の間でボールが永久に往復してしまうバグの対策。Issue #38）。
+        // パワーヒット中なら1発で即座に砕く（溜めた力を、壊れないブロックへの切り札として使える）。
         if (b.indestructible) {
           b.revealed = true;
-          soundClang();
-          reflectBallOffRect(ball, b); // 消えない相手なので押し出しも込みで反射
+          if (game.powerHits > 0) {
+            b.hitsRemaining = 0;
+            game.powerHits--;
+          } else {
+            b.hitsRemaining--;
+          }
+          if (b.hitsRemaining <= 0) {
+            b.alive = false;
+            game.combo++;
+            game.score += 10 + (game.combo - 1) * CONFIG.comboBonusPerHit;
+            spawnParticles(b.x + b.w / 2, b.y + b.h / 2, b.color);
+            soundBreak();
+            if (Math.random() < CONFIG.itemDropChance) {
+              spawnItem(b.x + b.w / 2, b.y + b.h / 2);
+            }
+          } else {
+            soundClang();
+          }
+          reflectBallOffRect(ball, b); // 砕けるかどうかに関わらず、消えない相手として押し出しも込みで反射
           break;
         }
         b.alive = false;
@@ -1120,6 +1144,50 @@
     ctx.arcTo(x, y, x + w, y, r);
     ctx.closePath();
     ctx.fill();
+  }
+
+  // 壊れないブロックのヒビ。被弾数ぶんだけヒビを重ねて「あと何発か」を見た目で分かるようにする
+  // （同じ灰色のブロックが複数あると見分けがつかず、別のブロックに分散して当ててしまい壊れない
+  // ように感じる、という問題への対策）。1つのヒビ＝本線＋枝分かれ（折れ線の配列。相対座標0〜1）。
+  const BRICK_CRACK_PATTERNS = [
+    [ [[0.12, 0.14], [0.30, 0.40], [0.26, 0.58], [0.42, 0.84]], [[0.30, 0.40], [0.50, 0.48]] ],
+    [ [[0.90, 0.20], [0.66, 0.36], [0.72, 0.56], [0.56, 0.74]], [[0.66, 0.36], [0.48, 0.28]] ],
+    [ [[0.50, 0.06], [0.46, 0.34], [0.28, 0.52]], [[0.46, 0.34], [0.70, 0.60], [0.64, 0.92]] ],
+  ];
+  function drawBrickCracks(b) {
+    if (!b.indestructible || !b.revealed) return;
+    const hitsTaken = CONFIG.indestructibleHitsToBreak - b.hitsRemaining;
+    if (hitsTaken <= 0) return;
+    const n = Math.min(hitsTaken, BRICK_CRACK_PATTERNS.length);
+
+    // 1つのヒビの全折れ線を1本のパスとして引く
+    const tracePattern = (pattern) => {
+      ctx.beginPath();
+      for (const line of pattern) {
+        ctx.moveTo(b.x + b.w * line[0][0], b.y + b.h * line[0][1]);
+        for (let p = 1; p < line.length; p++) {
+          ctx.lineTo(b.x + b.w * line[p][0], b.y + b.h * line[p][1]);
+        }
+      }
+    };
+
+    ctx.save();
+    ctx.lineCap = "round";
+    ctx.lineJoin = "round";
+    for (let i = 0; i < n; i++) {
+      const pattern = BRICK_CRACK_PATTERNS[i];
+      // 1) 暗い溝（ブロックにえぐれた割れ目）
+      tracePattern(pattern);
+      ctx.strokeStyle = "rgba(8, 6, 12, 0.55)";
+      ctx.lineWidth = 2.2;
+      ctx.stroke();
+      // 2) その中央に細く明るいハイライトを重ねて「彫り込まれた」立体感を出す
+      tracePattern(pattern);
+      ctx.strokeStyle = "rgba(232, 236, 245, 0.5)";
+      ctx.lineWidth = 0.8;
+      ctx.stroke();
+    }
+    ctx.restore();
   }
 
   // ボス本体を描く（グラデーションの体＋上部のトゲ＋ボールを追う目）。HPバーは呼び出し側で描く。
@@ -1393,11 +1461,12 @@
     ctx.clearRect(0, 0, W, H);
     drawStarfield(); // 宇宙っぽい背景（全ステージ共通）
 
-    // ブロック（壊れないブロックは、正体を現す＝revealed になると灰色になる）
+    // ブロック（壊れないブロックは、正体を現す＝revealed になると灰色になり、被弾数ぶんヒビが増える）
     for (const b of game.bricks) {
       if (!b.alive) continue;
       const color = (b.indestructible && b.revealed) ? "#4a4f5c" : b.color;
       drawRoundRect(b.x, b.y, b.w, b.h, 4, color);
+      drawBrickCracks(b);
     }
 
     // フラフラ障害物（壊れない。ボスの子分のような縮小版シルエットで描く）
