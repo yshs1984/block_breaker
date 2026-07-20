@@ -1095,14 +1095,6 @@
       ctx.fillText(text, ex, 46);
     }
 
-    // コンボ表示（2以上の間だけ。発動中の時間効果（上の行）とかぶらないよう1行下に表示）
-    if (game.combo >= 2) {
-      ctx.fillStyle = "#ffd166";
-      ctx.font = "13px system-ui, sans-serif";
-      ctx.textAlign = "left";
-      ctx.fillText("COMBO x" + game.combo, 12, 64);
-    }
-
     // 溜め撃ちのゲージ（パドルの少し上に表示）
     const gaugeW = 80, gaugeH = 6;
     const gx = W / 2 - gaugeW / 2, gy = game.paddle.y - 14;
@@ -1117,6 +1109,15 @@
       ctx.font = "12px system-ui, sans-serif";
       ctx.textAlign = "left";
       ctx.fillText("あと" + Math.ceil(game.timers.powerCooldown / 60) + "s", gx + gaugeW + 6, gy + gaugeH);
+    }
+
+    // コンボ表示（2以上の間だけ、パドルの少し上に大きめの文字で表示）
+    if (game.combo >= 2) {
+      ctx.fillStyle = "#ffd166";
+      ctx.font = "bold 22px system-ui, sans-serif";
+      ctx.textAlign = "center";
+      ctx.fillText("COMBO x" + game.combo, W / 2, gy - 10);
+      ctx.textAlign = "left";
     }
 
     // 状態に応じた案内メッセージ

@@ -82,7 +82,7 @@
 ## スコア・残機・ステージ
 
 - スコア: ブロック破壊で基本+10（コンボ加算あり、後述）、`bonus` アイテムで+100
-- コンボ（Issue #33）: `game.combo`（パドルから離れてから戻るまでの間に連続で壊した非`indestructible`ブロック数）。ブロックを壊すたびに `game.combo++` してから `game.score += 10 + (game.combo - 1) * CONFIG.comboBonusPerHit`（既定5）を加算する（1個目+10、2個目+15、3個目+20…）。`indestructible` ブロックはカウント対象外（早期`break`で弾かれる）。貫通中・パワーヒット中に同一フレームで複数ブロックを壊す既存ループとも両立し、壊した順にコンボが伸びる。パドルにボールが当たった瞬間（`game._paddleBounces++` と同じ箇所）と、ミス時・`startNewGame()`・`nextStage()` で `game.combo = 0` にリセットされる。画面表示は `game.combo >= 2` の間だけ「COMBO x◯」をスコアの下に表示
+- コンボ（Issue #33）: `game.combo`（パドルから離れてから戻るまでの間に連続で壊した非`indestructible`ブロック数）。ブロックを壊すたびに `game.combo++` してから `game.score += 10 + (game.combo - 1) * CONFIG.comboBonusPerHit`（既定5）を加算する（1個目+10、2個目+15、3個目+20…）。`indestructible` ブロックはカウント対象外（早期`break`で弾かれる）。貫通中・パワーヒット中に同一フレームで複数ブロックを壊す既存ループとも両立し、壊した順にコンボが伸びる。パドルにボールが当たった瞬間（`game._paddleBounces++` と同じ箇所）と、ミス時・`startNewGame()`・`nextStage()` で `game.combo = 0` にリセットされる。画面表示は `game.combo >= 2` の間だけ「COMBO x◯」をパドルの少し上（溜め撃ちゲージのさらに上）に大きめの文字（`bold 22px`）で表示する（当初はスコア付近に小さく表示していたが、アイテム持続時間の表示と重なる・気づきにくいというフィードバックを受けてパドル付近・大きめに変更した）
 - 残機: 初期値 `startLives`（既定3）。ボールを画面下に落とすと-1、`life` アイテムで+1。0でゲームオーバー
 - 残機ボーナス（Issue #26）: `playing` 中、`update()` の毎フレーム末尾付近で `game.score >= game._lifeBonusNextScore` を `while` で判定（1フレームで複数ラインを一気に超えても取りこぼさない）。超えるたびに残機+1・`_lifeBonusNextScore` に `lifeBonusScore`（既定1000）を加算・`soundLifeUp()` を再生。`tutorial` 中はこの判定を行わない。`startNewGame()` で `_lifeBonusNextScore` を `lifeBonusScore` にリセット、`nextStage()` ではリセットしない（1プレイを通してスコアが積み上がる前提のため）
 - 残機が増えた時の音（`soundLifeUp()`）: `life` アイテム取得時・スコアボーナス到達時の両方で共通して鳴る専用の効果音（`beep` を3音連続で鳴らす、他の効果音より長めのファンファーレ）。他の「良いアイテム」共通の `soundGood()` とは別に、残機増加だけ気づきやすくするため専用化した（`applyItem()` 内で `type === "life"` のときだけ分岐）
