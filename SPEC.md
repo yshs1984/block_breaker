@@ -81,9 +81,10 @@
 
 ## スコア・残機・ステージ
 
-- スコア: ブロック破壊で+10、`bonus` アイテムで+100
+- スコア: ブロック破壊で基本+10（コンボ加算あり、後述）、`bonus` アイテムで+100
+- コンボ（Issue #33）: `game.combo`（パドルから離れてから戻るまでの間に連続で壊した非`indestructible`ブロック数）。ブロックを壊すたびに `game.combo++` してから `game.score += 10 + (game.combo - 1) * CONFIG.comboBonusPerHit`（既定5）を加算する（1個目+10、2個目+15、3個目+20…）。`indestructible` ブロックはカウント対象外（早期`break`で弾かれる）。貫通中・パワーヒット中に同一フレームで複数ブロックを壊す既存ループとも両立し、壊した順にコンボが伸びる。パドルにボールが当たった瞬間（`game._paddleBounces++` と同じ箇所）と、ミス時・`startNewGame()`・`nextStage()` で `game.combo = 0` にリセットされる。画面表示は `game.combo >= 2` の間だけ「COMBO x◯」をパドルの少し上（溜め撃ちゲージのさらに上）に表示する。段階が上がるほど大きく・派手な色にする3段階演出: `combo < 5` は控えめ（`16px`・グレー`#9aa4bb`）、`5〜9` は目立つ（`bold 22px`・黄`#ffd166`）、`10以上` は最も目立つ（`bold 30px`・赤`#ff6b6b`）
 - 残機: 初期値 `startLives`（既定3）。ボールを画面下に落とすと-1、`life` アイテムで+1。0でゲームオーバー
-- 残機ボーナス（Issue #26）: `playing` 中、`update()` の毎フレーム末尾付近で `game.score >= game._lifeBonusNextScore` を `while` で判定（1フレームで複数ラインを一気に超えても取りこぼさない）。超えるたびに残機+1・`_lifeBonusNextScore` に `lifeBonusScore`（既定1000）を加算・`soundLifeUp()` を再生。`tutorial` 中はこの判定を行わない。`startNewGame()` で `_lifeBonusNextScore` を `lifeBonusScore` にリセット、`nextStage()` ではリセットしない（1プレイを通してスコアが積み上がる前提のため）
+- 残機ボーナス（Issue #26）: `playing` 中、`update()` の毎フレーム末尾付近で `game.score >= game._lifeBonusNextScore` を `while` で判定（1フレームで複数ラインを一気に超えても取りこぼさない）。超えるたびに残機+1・`_lifeBonusNextScore` に `lifeBonusScore`（既定2000。コンボ導入によるスコアインフレを踏まえ旧1000から引き上げ）を加算・`soundLifeUp()` を再生。`tutorial` 中はこの判定を行わない。`startNewGame()` で `_lifeBonusNextScore` を `lifeBonusScore` にリセット、`nextStage()` ではリセットしない（1プレイを通してスコアが積み上がる前提のため）
 - 残機が増えた時の音（`soundLifeUp()`）: `life` アイテム取得時・スコアボーナス到達時の両方で共通して鳴る専用の効果音（`beep` を3音連続で鳴らす、他の効果音より長めのファンファーレ）。他の「良いアイテム」共通の `soundGood()` とは別に、残機増加だけ気づきやすくするため専用化した（`applyItem()` 内で `type === "life"` のときだけ分岐）
 - ミス時（`playing` 中のみ）: 残機減少、ミス音、落下中アイテム・全タイマー・チャージ・パワーヒット残数・パドル反動をリセットし、パドルとボールを初期位置に戻す（残機が残っていれば続行）。残機が0になった瞬間は `recordGameOverRanking()` を1回呼ぶ（Issue #16）。**`tutorial` 中は残機を減らさず、ボールをパドル上に戻すだけ**
 - ステージクリア: `playing` 中に生存ブロック（`indestructible` を除く）が0個になった瞬間に、その時点の `game.stageTime` を `game.stageTimes` に記録してから `clear` 状態へ（`tutorial` 中はブロックが全滅してもこの判定は行わない）。次ステージ開始時（`nextStage()`）にパドル・ブロックを再配置し、ボールをリセット。**落下中アイテムと破片パーティクルは持ち越さずクリアする**。また、時間制のアイテム効果（貫通・大玉・スター等、`clearTimers()`）・チャージ・パワーヒット残数・パドル反動も、ミス時・新規ゲーム時と同様にリセットされる（Issue #34。以前は `nextStage()` だけこのリセットが抜けており、効果が次ステージへ持ち越されてしまうバグがあった）

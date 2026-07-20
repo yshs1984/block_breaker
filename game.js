@@ -79,10 +79,13 @@
     rankingMaxEntries: 5,   // ランキングの保存・表示件数
 
     // --- スコアによる残機ボーナス ---
-    lifeBonusScore: 1000,   // このスコアに達するたびに残機+1（超えた分は繰り越さず、単純に閾値を超えたかで判定する）
+    lifeBonusScore: 2000,   // このスコアに達するたびに残機+1（超えた分は繰り越さず、単純に閾値を超えたかで判定する。コンボ導入でスコアが伸びやすくなった分、旧1000から引き上げた）
 
     // --- 背景 ---
     starfieldCount: 70,     // 背景の星の数
+
+    // --- コンボ ---
+    comboBonusPerHit: 5,    // コンボが1伸びるごとに、その1個の得点に追加される点数
   };
 
   // ブロックの色（行ごとに変えると見た目が楽しい）
@@ -129,7 +132,7 @@
     stageTime: 0,    // 今のステージの経過フレーム数（表示は formatTime() で M:SS に変換）
     stageTimes: [],  // このプレイでクリアした各ステージの所要フレーム数（クリアした順）
     _rankingCache: [], // gameover 遷移時に読み込んだランキングを draw() で使い回すキャッシュ
-    _lifeBonusNextScore: 1000, // 次に残機+1になるスコアのライン（startNewGame()で lifeBonusScore にリセット）
+    _lifeBonusNextScore: 2000, // 次に残機+1になるスコアのライン（startNewGame()で lifeBonusScore にリセット）
     paddle: { x: 0, y: 0, w: 0, h: 0 },
     ball: { x: 0, y: 0, dx: 0, dy: 0, r: CONFIG.ballRadius },
     bricks: [],      // ブロックの配列（1つ = {x, y, w, h, color, alive}）
@@ -143,6 +146,7 @@
     charge: 0,       // 溜め撃ちのゲージ（0〜1）
     powerHits: 0,    // パワーヒットで残り何個、反射せず壊せるか
     paddleRecoil: 0, // パドルがボールを弾いたときの反動（見た目だけの下げ幅）
+    combo: 0,        // パドルから離れてから戻るまでの間に連続で壊したブロック数
     paused: false,   // ポーズ中かどうか
     obstacle: null,        // フラフラ動く障害物（1個だけ存在。null なら非表示）
     obstacleSpawnTimer: 0, // 次に出現するまでの残りフレーム数
@@ -309,6 +313,7 @@
     game.charge = 0;
     game.powerHits = 0;
     game.paddleRecoil = 0;
+    game.combo = 0;
     game.paused = false;
     game.obstacle = null;
     game.obstacleSpawnTimer = randomObstacleGap();
@@ -344,6 +349,7 @@
     game.charge = 0;
     game.powerHits = 0;
     game.paddleRecoil = 0;
+    game.combo = 0;        // 新しいステージなのでコンボもリセット
     game.obstacle = null;
     game.obstacleSpawnTimer = randomObstacleGap();
     game.state = "playing";
@@ -705,6 +711,7 @@
       ball.dy = -Math.abs(speed * Math.cos(angle));
       soundBounce();
       game._paddleBounces++; // チュートリアルなどが「弾けたか」を検知するためのカウンタ
+      game.combo = 0; // パドルに戻ってきたのでコンボは終了
 
       // 前回のパワーヒットがブロックに当たらないまま戻ってきたら、権利を無効化する（持ち越さない）
       if (game.powerHits > 0) game.powerHits = 0;
@@ -743,7 +750,8 @@
           break;
         }
         b.alive = false;
-        game.score += 10;
+        game.combo++;
+        game.score += 10 + (game.combo - 1) * CONFIG.comboBonusPerHit; // コンボが伸びるほど1個あたりの得点が増える
         spawnParticles(b.x + b.w / 2, b.y + b.h / 2, b.color);
         soundBreak();
         // ときどきアイテムを落とす（確率は CONFIG.itemDropChance）
@@ -793,6 +801,7 @@
         game.charge = 0;
         game.powerHits = 0;
         game.paddleRecoil = 0;
+        game.combo = 0;
         if (game.lives <= 0) {
           game.state = "gameover";
           recordGameOverRanking(); // 状態遷移の瞬間に1回だけ、ランキングへ記録する
@@ -1104,6 +1113,26 @@
       ctx.font = "12px system-ui, sans-serif";
       ctx.textAlign = "left";
       ctx.fillText("あと" + Math.ceil(game.timers.powerCooldown / 60) + "s", gx + gaugeW + 6, gy + gaugeH);
+    }
+
+    // コンボ表示（2以上の間だけ、パドルの少し上に表示。段階が上がるほど大きく・派手な色にする）
+    if (game.combo >= 2) {
+      let comboColor, comboFont;
+      if (game.combo >= 10) {
+        comboColor = "#ff6b6b";           // 2桁コンボは一番目立つ赤
+        comboFont = "bold 30px system-ui, sans-serif";
+      } else if (game.combo >= 5) {
+        comboColor = "#ffd166";           // 5以上は今までどおりの黄色
+        comboFont = "bold 22px system-ui, sans-serif";
+      } else {
+        comboColor = "#9aa4bb";           // 5未満は控えめなグレー
+        comboFont = "16px system-ui, sans-serif";
+      }
+      ctx.fillStyle = comboColor;
+      ctx.font = comboFont;
+      ctx.textAlign = "center";
+      ctx.fillText("COMBO x" + game.combo, W / 2, gy - 10);
+      ctx.textAlign = "left";
     }
 
     // 状態に応じた案内メッセージ
