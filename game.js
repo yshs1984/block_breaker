@@ -340,6 +340,10 @@
     resetBall();
     game.items = [];      // 前のステージで落下中だったアイテムを持ち越さない
     game.particles = [];  // 破片エフェクトの残骸も片付ける
+    clearTimers();         // 貫通・大玉・スター等の時間制効果をリセット（Issue #34）
+    game.charge = 0;
+    game.powerHits = 0;
+    game.paddleRecoil = 0;
     game.obstacle = null;
     game.obstacleSpawnTimer = randomObstacleGap();
     game.state = "playing";
