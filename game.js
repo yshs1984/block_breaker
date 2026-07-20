@@ -1128,23 +1128,51 @@
   // 「軟らかい角丸」ではない禍々しいシルエットにする。
   const BOSS_TOP_JAGS = [14, 26, 12, 30, 10, 24, 16];    // 上辺のトゲの高さ（左から順）
   const BOSS_BOTTOM_JAGS = [10, 18, 8, 20, 12, 16, 9];   // 下辺の牙状のトゲの長さ
-  function traceBossOutline(boss) {
+  // jagScale はトゲの縮尺（1=ボス本体サイズ基準）。障害物＝子分など小さい体に描くときは
+  // 体の高さに合わせて小さくしないと、トゲだけが体より大きくなってしまうため。
+  function traceBossOutline(rect, jagScale = 1) {
     const n = BOSS_TOP_JAGS.length;
-    const stepW = boss.w / n;
+    const stepW = rect.w / n;
+    const inset = 6 * jagScale; // 上下の縁の「くびれ」もトゲと同じ縮尺にする
     ctx.beginPath();
     // 上辺（左→右へ、山谷を交互に）
-    ctx.moveTo(boss.x, boss.y + 6);
+    ctx.moveTo(rect.x, rect.y + inset);
     for (let i = 0; i < n; i++) {
-      ctx.lineTo(boss.x + stepW * (i + 0.5), boss.y - BOSS_TOP_JAGS[i]);
-      ctx.lineTo(boss.x + stepW * (i + 1), boss.y + 6);
+      ctx.lineTo(rect.x + stepW * (i + 0.5), rect.y - BOSS_TOP_JAGS[i] * jagScale);
+      ctx.lineTo(rect.x + stepW * (i + 1), rect.y + inset);
     }
     // 右辺 → 下辺（右→左へ、下向きの牙）
-    ctx.lineTo(boss.x + boss.w, boss.y + boss.h - 6);
+    ctx.lineTo(rect.x + rect.w, rect.y + rect.h - inset);
     for (let i = n - 1; i >= 0; i--) {
-      ctx.lineTo(boss.x + stepW * (i + 0.5), boss.y + boss.h + BOSS_BOTTOM_JAGS[i]);
-      ctx.lineTo(boss.x + stepW * i, boss.y + boss.h - 6);
+      ctx.lineTo(rect.x + stepW * (i + 0.5), rect.y + rect.h + BOSS_BOTTOM_JAGS[i] * jagScale);
+      ctx.lineTo(rect.x + stepW * i, rect.y + rect.h - inset);
     }
     ctx.closePath();
+  }
+
+  // フラフラ障害物を「ボスの子分」らしく描く（ボスと同じギザギザ輪郭の縮小版＋小さな吊り目）。
+  // 色は従来どおり紫系にして、ボス本体（黒＋赤）とは見分けがつくようにする。
+  function drawMinion(ob) {
+    const jagScale = ob.h / 50; // ボス本体（高さ50px）に対する縮尺でトゲも小さくする
+    traceBossOutline(ob, jagScale);
+    const grad = ctx.createLinearGradient(ob.x, ob.y, ob.x, ob.y + ob.h);
+    grad.addColorStop(0, "#241038");   // 上はほぼ黒紫（ボスの「黒い体」と同じ発想）
+    grad.addColorStop(1, "#6c3fc5");   // 下端に従来の紫がにじむ
+    ctx.fillStyle = grad;
+    ctx.shadowColor = "#8f5cf0";
+    ctx.shadowBlur = 8;
+    ctx.fill();
+    ctx.shadowBlur = 0;
+    // 小さな吊り目（ボスの目の簡略版。紫っぽく光る）
+    const eyeY = ob.y + ob.h * 0.45;
+    const mcx = ob.x + ob.w / 2;
+    for (const dir of [-1, 1]) {
+      const ex = mcx + dir * ob.w * 0.2;
+      ctx.fillStyle = "#d9b8ff";
+      ctx.beginPath();
+      ctx.ellipse(ex, eyeY, 4, 1.8, dir * 0.35, 0, Math.PI * 2); // 傾けて「怒り目」に
+      ctx.fill();
+    }
   }
 
   function drawBoss(boss) {
@@ -1372,14 +1400,14 @@
       drawRoundRect(b.x, b.y, b.w, b.h, 4, color);
     }
 
-    // フラフラ障害物（壊れない。存在感のある色で表示）
+    // フラフラ障害物（壊れない。ボスの子分のような縮小版シルエットで描く）
     if (game.obstacle) {
-      drawRoundRect(game.obstacle.x, game.obstacle.y, game.obstacle.w, game.obstacle.h, 6, "#6c3fc5");
+      drawMinion(game.obstacle);
     }
 
-    // ボス戦の障害物（フラフラ障害物と同じ見た目）
+    // ボス戦の障害物（同じく子分の見た目）
     for (const ob of game.bossObstacles) {
-      drawRoundRect(ob.x, ob.y, ob.w, ob.h, 6, "#6c3fc5");
+      drawMinion(ob);
     }
 
     // ボス（ボスステージのみ。被弾直後は白く光り、少し上にHPバーを表示）
