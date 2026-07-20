@@ -1146,6 +1146,33 @@
     ctx.fill();
   }
 
+  // 壊れないブロックのヒビ（相対座標のジグザグ折れ線を数パターン持ち、被弾数ぶんだけ重ねて描く）。
+  // 「何発当てたか」を見た目で分かるようにする（同じ灰色のブロックが複数あると見分けがつかず、
+  // 別のブロックに分散して当ててしまい壊れないように感じる、という問題への対策）。
+  const BRICK_CRACK_PATTERNS = [
+    [[0.15, 0.2], [0.45, 0.5], [0.35, 0.8]],
+    [[0.85, 0.25], [0.55, 0.5], [0.6, 0.75]],
+    [[0.5, 0.1], [0.5, 0.45], [0.2, 0.9]],
+  ];
+  function drawBrickCracks(b) {
+    if (!b.indestructible || !b.revealed) return;
+    const hitsTaken = CONFIG.indestructibleHitsToBreak - b.hitsRemaining;
+    if (hitsTaken <= 0) return;
+    ctx.strokeStyle = "rgba(255,255,255,0.6)";
+    ctx.lineWidth = 1.5;
+    const n = Math.min(hitsTaken, BRICK_CRACK_PATTERNS.length);
+    for (let i = 0; i < n; i++) {
+      const pts = BRICK_CRACK_PATTERNS[i];
+      ctx.beginPath();
+      ctx.moveTo(b.x + b.w * pts[0][0], b.y + b.h * pts[0][1]);
+      for (let p = 1; p < pts.length; p++) {
+        ctx.lineTo(b.x + b.w * pts[p][0], b.y + b.h * pts[p][1]);
+      }
+      ctx.stroke();
+    }
+    ctx.lineWidth = 1;
+  }
+
   // ボス本体を描く（グラデーションの体＋上部のトゲ＋ボールを追う目）。HPバーは呼び出し側で描く。
   // ボスのギザギザ輪郭を ctx にパスとして引く（本体の塗りとシールドの線で使い回す）。
   // トゲの長さは固定パターン（毎フレーム乱数だとチラつくため）。上辺・下辺に不揃いなトゲを生やし、
@@ -1417,11 +1444,12 @@
     ctx.clearRect(0, 0, W, H);
     drawStarfield(); // 宇宙っぽい背景（全ステージ共通）
 
-    // ブロック（壊れないブロックは、正体を現す＝revealed になると灰色になる）
+    // ブロック（壊れないブロックは、正体を現す＝revealed になると灰色になり、被弾数ぶんヒビが増える）
     for (const b of game.bricks) {
       if (!b.alive) continue;
       const color = (b.indestructible && b.revealed) ? "#4a4f5c" : b.color;
       drawRoundRect(b.x, b.y, b.w, b.h, 4, color);
+      drawBrickCracks(b);
     }
 
     // フラフラ障害物（壊れない。ボスの子分のような縮小版シルエットで描く）
