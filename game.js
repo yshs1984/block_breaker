@@ -1111,10 +1111,21 @@
       ctx.fillText("あと" + Math.ceil(game.timers.powerCooldown / 60) + "s", gx + gaugeW + 6, gy + gaugeH);
     }
 
-    // コンボ表示（2以上の間だけ、パドルの少し上に大きめの文字で表示）
+    // コンボ表示（2以上の間だけ、パドルの少し上に表示。段階が上がるほど大きく・派手な色にする）
     if (game.combo >= 2) {
-      ctx.fillStyle = "#ffd166";
-      ctx.font = "bold 22px system-ui, sans-serif";
+      let comboColor, comboFont;
+      if (game.combo >= 10) {
+        comboColor = "#ff6b6b";           // 2桁コンボは一番目立つ赤
+        comboFont = "bold 30px system-ui, sans-serif";
+      } else if (game.combo >= 5) {
+        comboColor = "#ffd166";           // 5以上は今までどおりの黄色
+        comboFont = "bold 22px system-ui, sans-serif";
+      } else {
+        comboColor = "#9aa4bb";           // 5未満は控えめなグレー
+        comboFont = "16px system-ui, sans-serif";
+      }
+      ctx.fillStyle = comboColor;
+      ctx.font = comboFont;
       ctx.textAlign = "center";
       ctx.fillText("COMBO x" + game.combo, W / 2, gy - 10);
       ctx.textAlign = "left";
