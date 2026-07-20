@@ -83,6 +83,9 @@
 
     // --- 背景 ---
     starfieldCount: 70,     // 背景の星の数
+
+    // --- コンボ ---
+    comboBonusPerHit: 5,    // コンボが1伸びるごとに、その1個の得点に追加される点数
   };
 
   // ブロックの色（行ごとに変えると見た目が楽しい）
@@ -143,6 +146,7 @@
     charge: 0,       // 溜め撃ちのゲージ（0〜1）
     powerHits: 0,    // パワーヒットで残り何個、反射せず壊せるか
     paddleRecoil: 0, // パドルがボールを弾いたときの反動（見た目だけの下げ幅）
+    combo: 0,        // パドルから離れてから戻るまでの間に連続で壊したブロック数
     paused: false,   // ポーズ中かどうか
     obstacle: null,        // フラフラ動く障害物（1個だけ存在。null なら非表示）
     obstacleSpawnTimer: 0, // 次に出現するまでの残りフレーム数
@@ -309,6 +313,7 @@
     game.charge = 0;
     game.powerHits = 0;
     game.paddleRecoil = 0;
+    game.combo = 0;
     game.paused = false;
     game.obstacle = null;
     game.obstacleSpawnTimer = randomObstacleGap();
@@ -340,6 +345,7 @@
     resetBall();
     game.items = [];      // 前のステージで落下中だったアイテムを持ち越さない
     game.particles = [];  // 破片エフェクトの残骸も片付ける
+    game.combo = 0;        // 新しいステージなのでコンボもリセット
     game.obstacle = null;
     game.obstacleSpawnTimer = randomObstacleGap();
     game.state = "playing";
@@ -701,6 +707,7 @@
       ball.dy = -Math.abs(speed * Math.cos(angle));
       soundBounce();
       game._paddleBounces++; // チュートリアルなどが「弾けたか」を検知するためのカウンタ
+      game.combo = 0; // パドルに戻ってきたのでコンボは終了
 
       // 前回のパワーヒットがブロックに当たらないまま戻ってきたら、権利を無効化する（持ち越さない）
       if (game.powerHits > 0) game.powerHits = 0;
@@ -739,7 +746,8 @@
           break;
         }
         b.alive = false;
-        game.score += 10;
+        game.combo++;
+        game.score += 10 + (game.combo - 1) * CONFIG.comboBonusPerHit; // コンボが伸びるほど1個あたりの得点が増える
         spawnParticles(b.x + b.w / 2, b.y + b.h / 2, b.color);
         soundBreak();
         // ときどきアイテムを落とす（確率は CONFIG.itemDropChance）
@@ -789,6 +797,7 @@
         game.charge = 0;
         game.powerHits = 0;
         game.paddleRecoil = 0;
+        game.combo = 0;
         if (game.lives <= 0) {
           game.state = "gameover";
           recordGameOverRanking(); // 状態遷移の瞬間に1回だけ、ランキングへ記録する
@@ -1058,6 +1067,14 @@
     ctx.textAlign = "right";
     ctx.fillText("LIFE " + "♥".repeat(Math.max(0, game.lives)), W - 12, 26);
     ctx.textAlign = "left";
+
+    // コンボ表示（2以上の間だけ、スコアの下に小さく表示）
+    if (game.combo >= 2) {
+      ctx.fillStyle = "#ffd166";
+      ctx.font = "13px system-ui, sans-serif";
+      ctx.textAlign = "left";
+      ctx.fillText("COMBO x" + game.combo, 12, 44);
+    }
 
     // 発動中の時間効果を小さく表示（残り秒つき）
     const active = [];
