@@ -875,9 +875,10 @@
       }
 
       if (circleRectHit(ball, boss)) {
-        // 反射は毎回行うが、ダメージは無敵時間（hitCooldown）が切れているときだけ入れる。
-        // 上の壁とボスの隙間でボールが高速往復してHPが一気に減るのを防ぐため。
-        if (boss.hitCooldown === 0) {
+        // 反射は毎回行うが、ダメージは「無敵時間が切れている」かつ「突っ込み中でない」ときだけ入れる。
+        // ・hitCooldown: 上の壁との隙間で高速往復してHPが一気に減るのを防ぐ
+        // ・diving中は無敵: 突っ込みは攻撃モーションなので、近づいてもタダで削られない（見た目でシールドを出す）
+        if (boss.hitCooldown === 0 && !boss.diving) {
           boss.hitCooldown = CONFIG.bossHitCooldownSeconds * 60;
           // パワーヒット中はダメージが増える（1発を無駄にしないよう権利をここで消費する）
           if (game.powerHits > 0) {
@@ -1225,6 +1226,21 @@
       ctx.lineTo(fx, edgeY + 9 + (i % 2) * 4); // 牙の長さを交互に変えて不揃いにする
       ctx.closePath();
       ctx.fill();
+    }
+
+    // 突っ込み中はシールドを表示（この間は無敵＝当ててもダメージが入らないことを伝える）
+    if (boss.diving) {
+      const shieldPulse = 0.5 + 0.5 * Math.sin(Date.now() / 80);
+      ctx.save();
+      ctx.strokeStyle = `rgba(120, 210, 255, ${0.5 + shieldPulse * 0.4})`;
+      ctx.lineWidth = 3;
+      ctx.shadowColor = "#78d2ff";
+      ctx.shadowBlur = 14 + shieldPulse * 10;
+      const pad = 10 + shieldPulse * 4;
+      ctx.beginPath();
+      ctx.ellipse(cx, boss.y + boss.h / 2, boss.w / 2 + pad, boss.h / 2 + pad, 0, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.restore();
     }
   }
 
