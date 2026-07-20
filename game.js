@@ -1026,52 +1026,106 @@
   // ボス本体を描く（グラデーションの体＋上部のトゲ＋ボールを追う目）。HPバーは呼び出し側で描く。
   function drawBoss(boss) {
     const flashing = boss.flash > 0;
+    const cx = boss.x + boss.w / 2;
 
-    // 本体（上から下にグラデーションをかけて立体感を出す）
+    // ギザギザの輪郭（トゲの長さは固定パターン。毎フレーム乱数だとチラつくため）
+    // 上辺・下辺それぞれに不揃いなトゲを生やし、「軟らかい角丸」ではない禍々しいシルエットにする
+    const topJags = [14, 26, 12, 30, 10, 24, 16];    // 上辺のトゲの高さ（左から順）
+    const bottomJags = [10, 18, 8, 20, 12, 16, 9];   // 下辺の牙状のトゲの長さ
+    const n = topJags.length;
+    const stepW = boss.w / n;
+
+    ctx.beginPath();
+    // 上辺（左→右へ、山谷を交互に）
+    ctx.moveTo(boss.x, boss.y + 6);
+    for (let i = 0; i < n; i++) {
+      ctx.lineTo(boss.x + stepW * (i + 0.5), boss.y - topJags[i]);
+      ctx.lineTo(boss.x + stepW * (i + 1), boss.y + 6);
+    }
+    // 右辺 → 下辺（右→左へ、下向きの牙）
+    ctx.lineTo(boss.x + boss.w, boss.y + boss.h - 6);
+    for (let i = n - 1; i >= 0; i--) {
+      ctx.lineTo(boss.x + stepW * (i + 0.5), boss.y + boss.h + bottomJags[i]);
+      ctx.lineTo(boss.x + stepW * i, boss.y + boss.h - 6);
+    }
+    ctx.closePath();
+
+    // 脈動する赤いオーラ（ゆっくり明滅して「生きている」不気味さを出す）
+    const pulse = 0.5 + 0.5 * Math.sin(Date.now() / 250);
+    ctx.shadowColor = flashing ? "#ffffff" : "#ff0022";
+    ctx.shadowBlur = 18 + pulse * 14;
+
+    // 本体はほぼ黒（黒に近いほど威圧感が出る）。下端だけ血の色がにじむグラデーション
     const grad = ctx.createLinearGradient(boss.x, boss.y, boss.x, boss.y + boss.h);
     if (flashing) {
       grad.addColorStop(0, "#ffffff");
       grad.addColorStop(1, "#ffd6d6");
     } else {
-      grad.addColorStop(0, "#b23a55");
-      grad.addColorStop(1, "#6e1530");
+      grad.addColorStop(0, "#1a060e");
+      grad.addColorStop(0.65, "#2b0a16");
+      grad.addColorStop(1, "#7a0d20");
     }
-    drawRoundRect(boss.x, boss.y, boss.w, boss.h, 14, grad);
+    ctx.fillStyle = grad;
+    ctx.fill();
+    ctx.shadowBlur = 0; // 以降の描画に影響しないよう必ず戻す
 
-    // 上部のトゲトゲ（三角形を並べて「モンスターらしさ」を出す）
-    ctx.fillStyle = flashing ? "#ffffff" : "#4a0e22";
-    const spikeCount = 5;
-    const spikeW = boss.w / spikeCount;
-    for (let i = 0; i < spikeCount; i++) {
-      const sx = boss.x + i * spikeW;
+    // 体の亀裂（マグマのように光る割れ目。ダメージが進むほど赤みが強まる）
+    const damage = 1 - boss.hp / boss.maxHp;
+    ctx.strokeStyle = flashing ? "#ffffff" : `rgba(255, ${Math.floor(60 + 60 * pulse)}, 40, ${0.35 + damage * 0.6})`;
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(cx - boss.w * 0.32, boss.y + boss.h * 0.2);
+    ctx.lineTo(cx - boss.w * 0.22, boss.y + boss.h * 0.55);
+    ctx.lineTo(cx - boss.w * 0.3, boss.y + boss.h * 0.85);
+    ctx.moveTo(cx + boss.w * 0.28, boss.y + boss.h * 0.15);
+    ctx.lineTo(cx + boss.w * 0.34, boss.y + boss.h * 0.5);
+    ctx.lineTo(cx + boss.w * 0.26, boss.y + boss.h * 0.8);
+    ctx.stroke();
+    ctx.lineWidth = 1;
+
+    // 目（血の色に光る三角の吊り目。shadowBlurで発光させ、ボール方向をにらむ）
+    const eyeY = boss.y + boss.h * 0.38;
+    const eyeOffsetX = boss.w * 0.2;
+    for (const dir of [-1, 1]) {
+      const ex = cx + dir * eyeOffsetX;
+      const eyeDx = Math.max(-3, Math.min(3, (game.ball.x - ex) / 25));
+      ctx.shadowColor = "#ff2200";
+      ctx.shadowBlur = 12 + pulse * 8;
+      ctx.fillStyle = flashing ? "#ffffff" : "#ff2a1a";
+      // 外側が高く、中央に向かって鋭く落ちる三角形＝にらみつける形
       ctx.beginPath();
-      ctx.moveTo(sx, boss.y);
-      ctx.lineTo(sx + spikeW / 2, boss.y - 10);
-      ctx.lineTo(sx + spikeW, boss.y);
+      ctx.moveTo(ex + eyeDx + dir * 14, eyeY - 9);
+      ctx.lineTo(ex + eyeDx - dir * 12, eyeY + 1);
+      ctx.lineTo(ex + eyeDx + dir * 10, eyeY + 5);
       ctx.closePath();
       ctx.fill();
+      ctx.shadowBlur = 0;
     }
 
-    // 目（白目の丸い目だと可愛くなりすぎるので、白目無し・吊り眉のギラつく細目にする）
-    const eyeY = boss.y + boss.h * 0.42;
-    const eyeOffsetX = boss.w * 0.22;
-    for (const dir of [-1, 1]) {
-      const ex = boss.x + boss.w / 2 + dir * eyeOffsetX;
-
-      // 眉（中央に向かって下がる吊り眉。怒った表情の演出）
-      ctx.strokeStyle = flashing ? "#ffffff" : "#2a0812";
-      ctx.lineWidth = 4;
+    // 口（暗い裂け目＋ギザギザの白い牙。笑っているようで笑っていない不気味な形）
+    const mouthY = boss.y + boss.h * 0.66;
+    const mouthW = boss.w * 0.56;
+    const mouthH = boss.h * 0.26;
+    ctx.fillStyle = flashing ? "#ffd6d6" : "#0a0206";
+    ctx.beginPath();
+    ctx.moveTo(cx - mouthW / 2, mouthY);
+    ctx.quadraticCurveTo(cx, mouthY + mouthH * 1.6, cx + mouthW / 2, mouthY);
+    ctx.quadraticCurveTo(cx, mouthY + mouthH * 0.5, cx - mouthW / 2, mouthY);
+    ctx.closePath();
+    ctx.fill();
+    // 牙（上あごから下向きに生える鋭い三角形）
+    ctx.fillStyle = flashing ? "#ffffff" : "#e8e0d8";
+    const fangCount = 6;
+    for (let i = 0; i < fangCount; i++) {
+      const fx = cx - mouthW / 2 + mouthW * ((i + 0.5) / fangCount);
+      // 口の上側の縁の高さに合わせて牙の付け根を置く
+      const t = (fx - (cx - mouthW / 2)) / mouthW;             // 口の左端からの割合 0〜1
+      const edgeY = mouthY + mouthH * 0.5 * 4 * t * (1 - t) * 0.5; // 下弧のだいたいの縁
       ctx.beginPath();
-      ctx.moveTo(ex + dir * 10, eyeY - 14);
-      ctx.lineTo(ex - dir * 10, eyeY - 2);
-      ctx.stroke();
-      ctx.lineWidth = 1;
-
-      // 目（白目を描かず、ギラっと光る細い楕円だけにする。ボール方向へわずかに動く）
-      const eyeDx = Math.max(-2, Math.min(2, (game.ball.x - ex) / 30));
-      ctx.fillStyle = flashing ? "#ffffff" : "#ffcf3f";
-      ctx.beginPath();
-      ctx.ellipse(ex + eyeDx, eyeY, 7, 2.5, 0, 0, Math.PI * 2);
+      ctx.moveTo(fx - 4, edgeY);
+      ctx.lineTo(fx + 4, edgeY);
+      ctx.lineTo(fx, edgeY + 9 + (i % 2) * 4); // 牙の長さを交互に変えて不揃いにする
+      ctx.closePath();
       ctx.fill();
     }
   }
