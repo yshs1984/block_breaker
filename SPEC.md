@@ -9,6 +9,7 @@
   - `playing` 中・`tutorial` 中に `paused` フラグでポーズ可能（`state` 自体は変わらない）
 - ゲームループ: `requestAnimationFrame` で `update()` → `draw()` を毎フレーム繰り返す（約60fps前提）
 - 音: Web Audio API のビープ音のみ（音声ファイル不要）。初回キー操作で有効化
+- 背景（Issue #5）: `STARS`（`starfieldCount` 個、既定70。モジュール読み込み時に1回だけランダム生成される固定配置。ゲームの状態には影響しない純粋な飾り）を `drawStarfield()` が毎フレーム描画。各星は `Date.now()` ベースの `sin` 計算で明滅（`baseAlpha` × 0.5〜1.0 の範囲で振動）し、`draw()` の一番最初（`ctx.clearRect()` の直後）に呼ぶことで常に最背面に表示される。全ステージ共通で1種類のみ（ステージごとの変化なし）。`ctx.globalAlpha` は描画後に必ず1へ戻し、以降の描画に影響しないようにする
 
 ## ファイル構成
 
