@@ -65,6 +65,7 @@
     indestructibleStartStage: 3,    // このステージ数から「壊れないブロック」が普通のブロックに紛れ始める
     indestructibleMaxCount: 10,     // 壊れないブロックの上限数
     indestructibleStagesPerStep: 2, // この数のステージが経つごとに1個増える（貫通・速い球への対策）
+    indestructibleHitsToBreak: 3,   // 「壊れないブロック」も、この回数当たると砕ける（配置によっては永久にループするバグがあったため）
     floatingObstacleStartStage: 5,  // このステージ数から「フラフラ障害物」が出現し始める
     floatingObstacleSpeed: 1.8,     // 左右に動く速さ
     floatingObstacleLifeSeconds: 7, // 1回の出現で存在し続ける時間（秒）
@@ -405,7 +406,10 @@
         const idx = candidates[Math.floor(Math.random() * candidates.length)];
         if (!chosen.includes(idx) && !tooCloseToChosen(idx)) chosen.push(idx);
       }
-      for (const i of chosen) game.bricks[i].indestructible = true;
+      for (const i of chosen) {
+        game.bricks[i].indestructible = true;
+        game.bricks[i].hitsRemaining = CONFIG.indestructibleHitsToBreak;
+      }
     }
   }
 
@@ -965,11 +969,25 @@
       if (!b.alive) continue;
       if (circleRectHit(ball, b)) {
         // 壊れないブロック：見た目は普通のブロックと同じだったが、当たると正体を現す（灰色）。
-        // 消えることはなく、貫通・パワーヒット中でも無視されず必ず跳ね返す。
+        // 貫通・パワーヒット中でも無視されず必ず跳ね返す。ただし永久に壊れないわけではなく、
+        // indestructibleHitsToBreak 回（既定3）当たると普通のブロックと同じように砕ける
+        // （壊れないブロック同士の間でボールが永久に往復してしまうバグの対策。Issue #38）。
         if (b.indestructible) {
           b.revealed = true;
-          soundClang();
-          reflectBallOffRect(ball, b); // 消えない相手なので押し出しも込みで反射
+          b.hitsRemaining--;
+          if (b.hitsRemaining <= 0) {
+            b.alive = false;
+            game.combo++;
+            game.score += 10 + (game.combo - 1) * CONFIG.comboBonusPerHit;
+            spawnParticles(b.x + b.w / 2, b.y + b.h / 2, b.color);
+            soundBreak();
+            if (Math.random() < CONFIG.itemDropChance) {
+              spawnItem(b.x + b.w / 2, b.y + b.h / 2);
+            }
+          } else {
+            soundClang();
+          }
+          reflectBallOffRect(ball, b); // 砕けるかどうかに関わらず、消えない相手として押し出しも込みで反射
           break;
         }
         b.alive = false;
