@@ -89,7 +89,7 @@
 - 撃破（`hp <= 0`）: `game.score += bossDefeatBonus`（既定500）、撃破エフェクト・`soundBossDefeat()`、`game.boss = null`、`game.stageTimes.push(game.stageTime)`（通常のステージクリアと同じ記録）、`game.state = "clear"` に遷移（以降はスペースキーで `nextStage()` へ、既存の流れと同じ）。
 - ボスステージ中はフラフラ障害物を出現させない（`game.stage >= floatingObstacleStartStage` の判定に `&& !game.boss` を追加）。
 - **注意点**: 通常の「ステージクリア判定」（`game.bricks.every(...)`）は、ボスステージでは `game.bricks` が空配列のため `every()` が常に `true` を返してしまう（空配列の仕様）。誤発火を防ぐため、この判定に `&& !game.boss` を追加している。
-- 画面表示（`drawBoss()`）: 本体は上→下のグラデーション（通常時 `#b23a55`→`#6e1530`、被弾直後は `#ffffff`→`#ffd6d6`）。上部に三角形を5つ並べたトゲを描き、モンスターらしいシルエットにする。目を2つ描き、瞳は `game.ball` の位置へ向けてわずかに（最大±3px）動く。ボスの少し上にHPバー（`hp / maxHp` の割合で塗る）を表示する。
+- 画面表示（`drawBoss()`）: 本体は上→下のグラデーション（通常時 `#b23a55`→`#6e1530`、被弾直後は `#ffffff`→`#ffd6d6`）。上部に三角形を5つ並べたトゲを描き、モンスターらしいシルエットにする。目は白目を描かず、中央に向かって下がる吊り眉（`#2a0812`の太い線）＋ギラつく細い楕円（`#ffcf3f`）だけの怒った目にする（丸い白目だと可愛くなりすぎるため）。目の位置は `game.ball` のx座標へ向けてわずかに（最大±2px）動く。ボスの少し上にHPバー（`hp / maxHp` の割合で塗る）を表示する。
 - **ブロックの放出**: `boss.blockSpawnTimer`（`createBoss()` で `bossBlockIntervalSeconds * 60`、既定4秒ぶんのフレームに初期化）を毎フレーム1減らし、0以下になったら `bossBlockIntervalSeconds * 60` で再セットし、`game.bricks` 内の生存ブロック数が `bossBlockMaxOnField`（既定6）未満なら `spawnBossBlocks()` を呼ぶ。`spawnBossBlocks()` は `bossBlockCount`（既定2）個のブロック（50×20px、色 `#ff6b6b`、`indestructible: false`）をボスの少し下（`boss.y + boss.h + 20〜60`）のランダムなx位置に `game.bricks` へ追加するだけの単純な関数。放出後のブロックは通常の「ブロックとの当たり判定」ループでそのまま処理されるため、スコア加算・コンボ・アイテムドロップ・破壊音などは既存ロジックを何も変更せずにそのまま適用される。
 - **ホーミングとの連携**: `findNearestBrick()` は `game.bricks` を見た後、`game.boss` が存在すればそれも候補に含める（ボスステージ中は `game.bricks` が最初は空のため、ボスが無ければホーミングアイテムの対象が無くなってしまう）。ボスが放出したブロックが場にある場合は、通常どおり距離比較でどちらか近い方が選ばれる。
 

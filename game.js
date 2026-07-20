@@ -1052,20 +1052,26 @@
       ctx.fill();
     }
 
-    // 目（ボールの方向へ瞳がわずかに動く。生きている感じを出す）
-    const eyeY = boss.y + boss.h * 0.4;
+    // 目（白目の丸い目だと可愛くなりすぎるので、白目無し・吊り眉のギラつく細目にする）
+    const eyeY = boss.y + boss.h * 0.42;
     const eyeOffsetX = boss.w * 0.22;
     for (const dir of [-1, 1]) {
       const ex = boss.x + boss.w / 2 + dir * eyeOffsetX;
-      ctx.fillStyle = "#fff8f0";
+
+      // 眉（中央に向かって下がる吊り眉。怒った表情の演出）
+      ctx.strokeStyle = flashing ? "#ffffff" : "#2a0812";
+      ctx.lineWidth = 4;
       ctx.beginPath();
-      ctx.arc(ex, eyeY, 9, 0, Math.PI * 2);
-      ctx.fill();
-      const pupilDx = Math.max(-3, Math.min(3, (game.ball.x - ex) / 20));
-      const pupilDy = Math.max(-3, Math.min(3, (game.ball.y - eyeY) / 20));
-      ctx.fillStyle = "#1a1020";
+      ctx.moveTo(ex + dir * 10, eyeY - 14);
+      ctx.lineTo(ex - dir * 10, eyeY - 2);
+      ctx.stroke();
+      ctx.lineWidth = 1;
+
+      // 目（白目を描かず、ギラっと光る細い楕円だけにする。ボール方向へわずかに動く）
+      const eyeDx = Math.max(-2, Math.min(2, (game.ball.x - ex) / 30));
+      ctx.fillStyle = flashing ? "#ffffff" : "#ffcf3f";
       ctx.beginPath();
-      ctx.arc(ex + pupilDx, eyeY + pupilDy, 4, 0, Math.PI * 2);
+      ctx.ellipse(ex + eyeDx, eyeY, 7, 2.5, 0, 0, Math.PI * 2);
       ctx.fill();
     }
   }
