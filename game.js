@@ -1068,14 +1068,6 @@
     ctx.fillText("LIFE " + "♥".repeat(Math.max(0, game.lives)), W - 12, 26);
     ctx.textAlign = "left";
 
-    // コンボ表示（2以上の間だけ、スコアの下に小さく表示）
-    if (game.combo >= 2) {
-      ctx.fillStyle = "#ffd166";
-      ctx.font = "13px system-ui, sans-serif";
-      ctx.textAlign = "left";
-      ctx.fillText("COMBO x" + game.combo, 12, 44);
-    }
-
     // 発動中の時間効果を小さく表示（残り秒つき）
     const active = [];
     if (game.timers.wide > 0)   active.push(["拡大", "#06d6a0", game.timers.wide]);
@@ -1101,6 +1093,14 @@
       const text = "パワー ×" + game.powerHits;
       ctx.fillStyle = "#ffb703";
       ctx.fillText(text, ex, 46);
+    }
+
+    // コンボ表示（2以上の間だけ。発動中の時間効果（上の行）とかぶらないよう1行下に表示）
+    if (game.combo >= 2) {
+      ctx.fillStyle = "#ffd166";
+      ctx.font = "13px system-ui, sans-serif";
+      ctx.textAlign = "left";
+      ctx.fillText("COMBO x" + game.combo, 12, 64);
     }
 
     // 溜め撃ちのゲージ（パドルの少し上に表示）
