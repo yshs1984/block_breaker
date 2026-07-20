@@ -77,6 +77,9 @@
 
     // --- ランキング ---
     rankingMaxEntries: 5,   // ランキングの保存・表示件数
+
+    // --- 背景 ---
+    starfieldCount: 70,     // 背景の星の数
   };
 
   // ブロックの色（行ごとに変えると見た目が楽しい）
@@ -949,9 +952,32 @@
     ctx.textAlign = "start";
   }
 
+  // 宇宙っぽい背景用の星（見た目だけの飾り。ゲームの状態には影響しない。読み込み時に1回だけ生成）
+  const STARS = Array.from({ length: CONFIG.starfieldCount }, () => ({
+    x: Math.random() * W,
+    y: Math.random() * H,
+    r: 0.5 + Math.random() * 1.3,            // 大きさ（近い星ほど大きく見える演出）
+    baseAlpha: 0.3 + Math.random() * 0.6,    // 基本の明るさ
+    twinkleSpeed: 0.3 + Math.random() * 0.8, // 明滅の速さ（秒あたり）
+    phase: Math.random() * Math.PI * 2,      // 明滅の位相（星ごとにズラしてバラバラに光らせる）
+  }));
+
+  function drawStarfield() {
+    const t = Date.now() / 1000;
+    for (const s of STARS) {
+      ctx.globalAlpha = s.baseAlpha * (0.5 + 0.5 * Math.sin(t * s.twinkleSpeed + s.phase));
+      ctx.fillStyle = "#e6e9f0";
+      ctx.beginPath();
+      ctx.arc(s.x, s.y, s.r, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.globalAlpha = 1; // 以降の描画に影響しないよう必ず1へ戻す
+  }
+
   function draw() {
     // 画面をいったんクリア
     ctx.clearRect(0, 0, W, H);
+    drawStarfield(); // 宇宙っぽい背景（全ステージ共通）
 
     // ブロック（壊れないブロックは、正体を現す＝revealed になると灰色になる）
     for (const b of game.bricks) {
