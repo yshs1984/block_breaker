@@ -92,13 +92,17 @@
     bossBaseHp: 15,        // 1体目のボスのHP
     bossHpPerDefeat: 5,    // ボスを倒すたびに次のボスのHPがこれだけ増える
     bossHpMax: 40,         // ボスHPの上限（際限なく増えて倒せなくならないように）
-    bossSpeed: 2.2,        // ボスの左右移動速度
+    bossSpeed: 2.2,        // ボスの左右移動速度（1体目）
+    bossSpeedPerDefeat: 0.5, // ボスの回が1つ進むごとに左右速度に加算する量
+    bossSpeedCapValue: 4.5,  // ボスの左右速度の上限
     bossBobAmp: 14,        // ボスの上下の揺れ幅（ピクセル）
     bossDefeatBonus: 500,  // ボスを倒したときのスコアボーナス
     bossPowerHitDamage: 3, // パワーヒット中にボスへ当てたときのダメージ（通常は1）
+    bossHitCooldownSeconds: 0.4, // ボスが連続でダメージを受けない最短間隔（上の壁との隙間で往復してHPが激減するのを防ぐ）
     bossBlockIntervalSeconds: 4, // ボスが新しいブロックを放出する間隔（秒）
     bossBlockCount: 2,           // 1回の放出で出てくるブロックの数
     bossBlockMaxOnField: 6,      // 場に残っているブロックがこの数以上あれば、その回の放出はスキップする
+    bossObstacleMaxCount: 3,     // ボス戦で同時に出るフラフラ障害物の数の上限
   };
 
   // ブロックの色（行ごとに変えると見た目が楽しい）
@@ -160,7 +164,8 @@
     powerHits: 0,    // パワーヒットで残り何個、反射せず壊せるか
     paddleRecoil: 0, // パドルがボールを弾いたときの反動（見た目だけの下げ幅）
     combo: 0,        // パドルから離れてから戻るまでの間に連続で壊したブロック数
-    boss: null,      // ボスステージ中だけ存在（{x,y,w,h,hp,maxHp,dx,baseY,bobPhase,flash}）。null なら非ボスステージ
+    boss: null,      // ボスステージ中だけ存在（{x,y,w,h,hp,maxHp,dx,baseY,bobPhase,flash,hitCooldown}）。null なら非ボスステージ
+    bossObstacles: [], // ボス戦中だけ漂う障害物（回が進むほど増える）。通常ステージの game.obstacle とは別物
     paused: false,   // ポーズ中かどうか
     obstacle: null,        // フラフラ動く障害物（1個だけ存在。null なら非表示）
     obstacleSpawnTimer: 0, // 次に出現するまでの残りフレーム数
@@ -257,6 +262,11 @@
     );
     const w = 180, h = 50;
     const baseY = 110;
+    // 回が進むほど左右移動が速くなる（上限あり）
+    const speed = Math.min(
+      CONFIG.bossSpeed + (bossNumber - 1) * CONFIG.bossSpeedPerDefeat,
+      CONFIG.bossSpeedCapValue
+    );
     return {
       x: (W - w) / 2,
       y: baseY,
@@ -264,11 +274,31 @@
       w, h,
       hp,
       maxHp: hp,
-      dx: CONFIG.bossSpeed,
+      dx: speed,
       bobPhase: 0,
       flash: 0, // 被弾直後、白く光らせる残りフレーム数
+      hitCooldown: 0, // ダメージを受けた直後の無敵フレーム（0になるまで次のダメージが入らない）
       blockSpawnTimer: CONFIG.bossBlockIntervalSeconds * 60, // 次にブロックを放出するまでの残りフレーム数
     };
+  }
+
+  // ボス戦で漂う障害物を count 個つくって返す（各要素はフラフラ障害物と同じ形。寿命は持たず戦闘中ずっと残る）
+  function createBossObstacles(count) {
+    const arr = [];
+    const w = 70, h = 22;
+    for (let i = 0; i < count; i++) {
+      const dir = i % 2 === 0 ? -1 : 1;      // 向きを交互にして重なりにくくする
+      const baseY = H * 0.4 + i * 44;        // 縦位置も少しずつずらす
+      arr.push({
+        x: dir < 0 ? W - w : 0,
+        y: baseY,
+        baseY,
+        w, h,
+        dx: dir * CONFIG.floatingObstacleSpeed,
+        bobPhase: i,                          // 位相もずらしてバラバラに揺らす
+      });
+    }
+    return arr;
   }
 
   // ボスが定期的に放出する小さなブロックを bossBlockCount 個、ボスの少し下にランダムな位置で追加する。
@@ -296,9 +326,14 @@
     if (isBossStage(game.stage)) {
       game.bricks = [];
       game.boss = createBoss();
+      // 回が進むほど障害物を増やす（1体目=0個, 2体目=1個, 3体目=2個... 上限あり）
+      const bossNumber = game.stage / CONFIG.bossStageInterval;
+      const obstacleCount = Math.min(bossNumber - 1, CONFIG.bossObstacleMaxCount);
+      game.bossObstacles = createBossObstacles(obstacleCount);
       return;
     }
     game.boss = null;
+    game.bossObstacles = [];
     game.bricks = [];
     // ステージごとに1行増えるが、brickMaxRows で頭打ちにする
     // （上限が無いと遠いステージでブロックがパドルの可動域まで埋め尽くしてしまうため。Issue #15）
@@ -787,6 +822,7 @@
       boss.bobPhase += 0.04;
       boss.y = boss.baseY + Math.sin(boss.bobPhase) * CONFIG.bossBobAmp;
       if (boss.flash > 0) boss.flash--;
+      if (boss.hitCooldown > 0) boss.hitCooldown--;
 
       // 一定間隔でブロックを放出する（場に残っているブロックが多すぎるときはスキップ）
       boss.blockSpawnTimer--;
@@ -797,30 +833,50 @@
       }
 
       if (circleRectHit(ball, boss)) {
-        // パワーヒット中はダメージが増える（1発を無駄にしないよう権利をここで消費する）
-        if (game.powerHits > 0) {
-          boss.hp -= CONFIG.bossPowerHitDamage;
-          game.powerHits--;
-        } else {
-          boss.hp--;
+        // 反射は毎回行うが、ダメージは無敵時間（hitCooldown）が切れているときだけ入れる。
+        // 上の壁とボスの隙間でボールが高速往復してHPが一気に減るのを防ぐため。
+        if (boss.hitCooldown === 0) {
+          boss.hitCooldown = CONFIG.bossHitCooldownSeconds * 60;
+          // パワーヒット中はダメージが増える（1発を無駄にしないよう権利をここで消費する）
+          if (game.powerHits > 0) {
+            boss.hp -= CONFIG.bossPowerHitDamage;
+            game.powerHits--;
+          } else {
+            boss.hp--;
+          }
+          boss.flash = 10;
+          spawnParticles(ball.x, ball.y, "#ff6b6b");
+          soundClang();
+          // 通常のブロックと同じ確率でアイテムを落とす（貫通・パワーヒットを駆使して戦える）
+          if (Math.random() < CONFIG.itemDropChance) {
+            spawnItem(ball.x, ball.y);
+          }
         }
-        boss.flash = 10;
-        spawnParticles(ball.x, ball.y, "#ff6b6b");
-        soundClang();
-        // 通常のブロックと同じ確率でアイテムを落とす（貫通・パワーヒットを駆使して戦える）
-        if (Math.random() < CONFIG.itemDropChance) {
-          spawnItem(ball.x, ball.y);
-        }
-        // 壊れないブロックと同じく、貫通・パワーヒット中でも必ず跳ね返す（すり抜けない）
+        // 壊れないブロックと同じく、貫通・パワーヒット中でも必ず跳ね返す（すり抜けない）。
+        // クールダウン中でも跳ね返りだけは行う。
         reflectBallOffRect(ball, boss);
         if (boss.hp <= 0) {
           game.score += CONFIG.bossDefeatBonus;
           spawnParticles(boss.x + boss.w / 2, boss.y + boss.h / 2, "#ff6b6b");
           soundBossDefeat();
           game.boss = null;
+          game.bossObstacles = []; // クリア画面に障害物が残らないよう片付ける
           game.stageTimes.push(game.stageTime); // 通常のステージクリアと同様に記録する
           game.state = "clear";
         }
+      }
+    }
+
+    // --- ボス戦の障害物（回が進むほど数が増える。ボスを倒すまで漂い続ける） ---
+    for (const ob of game.bossObstacles) {
+      ob.x += ob.dx;
+      if (ob.x < 0) { ob.x = 0; ob.dx *= -1; }
+      if (ob.x + ob.w > W) { ob.x = W - ob.w; ob.dx *= -1; }
+      ob.bobPhase += 0.05;
+      ob.y = ob.baseY + Math.sin(ob.bobPhase) * CONFIG.floatingObstacleBobAmp;
+      if (circleRectHit(ball, ob)) {
+        reflectBallOffRect(ball, ob);
+        soundClang();
       }
     }
 
@@ -1252,6 +1308,11 @@
     // フラフラ障害物（壊れない。存在感のある色で表示）
     if (game.obstacle) {
       drawRoundRect(game.obstacle.x, game.obstacle.y, game.obstacle.w, game.obstacle.h, 6, "#6c3fc5");
+    }
+
+    // ボス戦の障害物（フラフラ障害物と同じ見た目）
+    for (const ob of game.bossObstacles) {
+      drawRoundRect(ob.x, ob.y, ob.w, ob.h, 6, "#6c3fc5");
     }
 
     // ボス（ボスステージのみ。被弾直後は白く光り、少し上にHPバーを表示）
