@@ -972,9 +972,15 @@
         // 貫通・パワーヒット中でも無視されず必ず跳ね返す。ただし永久に壊れないわけではなく、
         // indestructibleHitsToBreak 回（既定3）当たると普通のブロックと同じように砕ける
         // （壊れないブロック同士の間でボールが永久に往復してしまうバグの対策。Issue #38）。
+        // パワーヒット中なら1発で即座に砕く（溜めた力を、壊れないブロックへの切り札として使える）。
         if (b.indestructible) {
           b.revealed = true;
-          b.hitsRemaining--;
+          if (game.powerHits > 0) {
+            b.hitsRemaining = 0;
+            game.powerHits--;
+          } else {
+            b.hitsRemaining--;
+          }
           if (b.hitsRemaining <= 0) {
             b.alive = false;
             game.combo++;
