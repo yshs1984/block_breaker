@@ -95,6 +95,7 @@
     bossSpeed: 2.2,        // ボスの左右移動速度
     bossBobAmp: 14,        // ボスの上下の揺れ幅（ピクセル）
     bossDefeatBonus: 500,  // ボスを倒したときのスコアボーナス
+    bossPowerHitDamage: 3, // パワーヒット中にボスへ当てたときのダメージ（通常は1）
   };
 
   // ブロックの色（行ごとに変えると見た目が楽しい）
@@ -754,7 +755,13 @@
       boss.y = boss.baseY + Math.sin(boss.bobPhase) * CONFIG.bossBobAmp;
       if (boss.flash > 0) boss.flash--;
       if (circleRectHit(ball, boss)) {
-        boss.hp--;
+        // パワーヒット中はダメージが増える（1発を無駄にしないよう権利をここで消費する）
+        if (game.powerHits > 0) {
+          boss.hp -= CONFIG.bossPowerHitDamage;
+          game.powerHits--;
+        } else {
+          boss.hp--;
+        }
         boss.flash = 10;
         spawnParticles(ball.x, ball.y, "#ff6b6b");
         soundClang();
@@ -762,7 +769,7 @@
         if (Math.random() < CONFIG.itemDropChance) {
           spawnItem(ball.x, ball.y);
         }
-        // 壊れないブロックと同じく、貫通・パワーヒット中でも必ず跳ね返す（1フレームに1ダメージ）
+        // 壊れないブロックと同じく、貫通・パワーヒット中でも必ず跳ね返す（すり抜けない）
         reflectBallOffRect(ball, boss);
         if (boss.hp <= 0) {
           game.score += CONFIG.bossDefeatBonus;
