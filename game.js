@@ -79,7 +79,7 @@
     rankingMaxEntries: 5,   // ランキングの保存・表示件数
 
     // --- スコアによる残機ボーナス ---
-    lifeBonusScore: 1000,   // このスコアに達するたびに残機+1（超えた分は繰り越さず、単純に閾値を超えたかで判定する）
+    lifeBonusScore: 2000,   // このスコアに達するたびに残機+1（超えた分は繰り越さず、単純に閾値を超えたかで判定する。コンボ導入でスコアが伸びやすくなった分、旧1000から引き上げた）
 
     // --- 背景 ---
     starfieldCount: 70,     // 背景の星の数
@@ -132,7 +132,7 @@
     stageTime: 0,    // 今のステージの経過フレーム数（表示は formatTime() で M:SS に変換）
     stageTimes: [],  // このプレイでクリアした各ステージの所要フレーム数（クリアした順）
     _rankingCache: [], // gameover 遷移時に読み込んだランキングを draw() で使い回すキャッシュ
-    _lifeBonusNextScore: 1000, // 次に残機+1になるスコアのライン（startNewGame()で lifeBonusScore にリセット）
+    _lifeBonusNextScore: 2000, // 次に残機+1になるスコアのライン（startNewGame()で lifeBonusScore にリセット）
     paddle: { x: 0, y: 0, w: 0, h: 0 },
     ball: { x: 0, y: 0, dx: 0, dy: 0, r: CONFIG.ballRadius },
     bricks: [],      // ブロックの配列（1つ = {x, y, w, h, color, alive}）
