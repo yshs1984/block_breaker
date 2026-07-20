@@ -1146,31 +1146,48 @@
     ctx.fill();
   }
 
-  // 壊れないブロックのヒビ（相対座標のジグザグ折れ線を数パターン持ち、被弾数ぶんだけ重ねて描く）。
-  // 「何発当てたか」を見た目で分かるようにする（同じ灰色のブロックが複数あると見分けがつかず、
-  // 別のブロックに分散して当ててしまい壊れないように感じる、という問題への対策）。
+  // 壊れないブロックのヒビ。被弾数ぶんだけヒビを重ねて「あと何発か」を見た目で分かるようにする
+  // （同じ灰色のブロックが複数あると見分けがつかず、別のブロックに分散して当ててしまい壊れない
+  // ように感じる、という問題への対策）。1つのヒビ＝本線＋枝分かれ（折れ線の配列。相対座標0〜1）。
   const BRICK_CRACK_PATTERNS = [
-    [[0.15, 0.2], [0.45, 0.5], [0.35, 0.8]],
-    [[0.85, 0.25], [0.55, 0.5], [0.6, 0.75]],
-    [[0.5, 0.1], [0.5, 0.45], [0.2, 0.9]],
+    [ [[0.12, 0.14], [0.30, 0.40], [0.26, 0.58], [0.42, 0.84]], [[0.30, 0.40], [0.50, 0.48]] ],
+    [ [[0.90, 0.20], [0.66, 0.36], [0.72, 0.56], [0.56, 0.74]], [[0.66, 0.36], [0.48, 0.28]] ],
+    [ [[0.50, 0.06], [0.46, 0.34], [0.28, 0.52]], [[0.46, 0.34], [0.70, 0.60], [0.64, 0.92]] ],
   ];
   function drawBrickCracks(b) {
     if (!b.indestructible || !b.revealed) return;
     const hitsTaken = CONFIG.indestructibleHitsToBreak - b.hitsRemaining;
     if (hitsTaken <= 0) return;
-    ctx.strokeStyle = "rgba(255,255,255,0.6)";
-    ctx.lineWidth = 1.5;
     const n = Math.min(hitsTaken, BRICK_CRACK_PATTERNS.length);
-    for (let i = 0; i < n; i++) {
-      const pts = BRICK_CRACK_PATTERNS[i];
+
+    // 1つのヒビの全折れ線を1本のパスとして引く
+    const tracePattern = (pattern) => {
       ctx.beginPath();
-      ctx.moveTo(b.x + b.w * pts[0][0], b.y + b.h * pts[0][1]);
-      for (let p = 1; p < pts.length; p++) {
-        ctx.lineTo(b.x + b.w * pts[p][0], b.y + b.h * pts[p][1]);
+      for (const line of pattern) {
+        ctx.moveTo(b.x + b.w * line[0][0], b.y + b.h * line[0][1]);
+        for (let p = 1; p < line.length; p++) {
+          ctx.lineTo(b.x + b.w * line[p][0], b.y + b.h * line[p][1]);
+        }
       }
+    };
+
+    ctx.save();
+    ctx.lineCap = "round";
+    ctx.lineJoin = "round";
+    for (let i = 0; i < n; i++) {
+      const pattern = BRICK_CRACK_PATTERNS[i];
+      // 1) 暗い溝（ブロックにえぐれた割れ目）
+      tracePattern(pattern);
+      ctx.strokeStyle = "rgba(8, 6, 12, 0.55)";
+      ctx.lineWidth = 2.2;
+      ctx.stroke();
+      // 2) その中央に細く明るいハイライトを重ねて「彫り込まれた」立体感を出す
+      tracePattern(pattern);
+      ctx.strokeStyle = "rgba(232, 236, 245, 0.5)";
+      ctx.lineWidth = 0.8;
       ctx.stroke();
     }
-    ctx.lineWidth = 1;
+    ctx.restore();
   }
 
   // ボス本体を描く（グラデーションの体＋上部のトゲ＋ボールを追う目）。HPバーは呼び出し側で描く。
