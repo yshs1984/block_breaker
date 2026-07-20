@@ -96,6 +96,12 @@
     bossSpeedPerDefeat: 0.5, // ボスの回が1つ進むごとに左右速度に加算する量
     bossSpeedCapValue: 4.5,  // ボスの左右速度の上限
     bossBobAmp: 14,        // ボスの上下の揺れ幅（ピクセル）
+    bossDirChangeMinSeconds: 0.8, // 左右の向きを不規則に変える間隔（最短。単調な壁往復を崩す）
+    bossDirChangeMaxSeconds: 2.5, // 同（最長）
+    bossDiveIntervalMinSeconds: 3, // 下に突っ込むまでの間隔（最短）
+    bossDiveIntervalMaxSeconds: 6, // 同（最長）
+    bossDiveDepth: 150,    // 突っ込むときに下へ降りる距離（ピクセル）
+    bossDiveDurationSeconds: 1.1, // 突っ込んで戻るまでの時間（秒）
     bossDefeatBonus: 500,  // ボスを倒したときのスコアボーナス
     bossPowerHitDamage: 3, // パワーヒット中にボスへ当てたときのダメージ（通常は1）
     bossHitCooldownSeconds: 0.8, // ボスが連続でダメージを受けない最短間隔（上の壁との隙間で往復してHPが激減するのを防ぐ）
@@ -279,7 +285,17 @@
       flash: 0, // 被弾直後、白く光らせる残りフレーム数
       hitCooldown: 0, // ダメージを受けた直後の無敵フレーム（0になるまで次のダメージが入らない）
       blockSpawnTimer: CONFIG.bossBlockIntervalSeconds * 60, // 次にブロックを放出するまでの残りフレーム数
+      dirTimer: randSecFrames(CONFIG.bossDirChangeMinSeconds, CONFIG.bossDirChangeMaxSeconds), // 次に左右の向きを不規則に変えるまで
+      diveTimer: randSecFrames(CONFIG.bossDiveIntervalMinSeconds, CONFIG.bossDiveIntervalMaxSeconds), // 次に下へ突っ込むまで
+      diving: false, // 今まさに突っ込み中か
+      diveT: 0,      // 突っ込みの進み具合（0→1）
+      diveOffset: 0, // 突っ込みによる下方向のオフセット（ピクセル）
     };
+  }
+
+  // 秒の範囲からランダムなフレーム数を返す（ボスの不規則な動きのタイマー用）
+  function randSecFrames(minSec, maxSec) {
+    return (minSec + Math.random() * (maxSec - minSec)) * 60;
   }
 
   // ボス戦で漂う障害物を count 個つくって返す（各要素はフラフラ障害物と同じ形。寿命は持たず戦闘中ずっと残る）
@@ -816,11 +832,37 @@
     // --- ボス（ボスステージ中だけ存在。左右＋上下に動き回り、当てるとHPが減る） ---
     if (game.boss) {
       const boss = game.boss;
+
+      // 左右移動。壁で反転するほか、不規則な間隔でも向きをランダムに切り替える
+      // （単調な壁往復だと、たまたまボールと横移動が同期して同じ場所で当たり続けてしまうため）
       boss.x += boss.dx;
       if (boss.x < 0) { boss.x = 0; boss.dx *= -1; }
       if (boss.x + boss.w > W) { boss.x = W - boss.w; boss.dx *= -1; }
+      boss.dirTimer--;
+      if (boss.dirTimer <= 0) {
+        boss.dx = (Math.random() < 0.5 ? -1 : 1) * Math.abs(boss.dx); // 同じ向きに続くこともある＝読みにくい
+        boss.dirTimer = randSecFrames(CONFIG.bossDirChangeMinSeconds, CONFIG.bossDirChangeMaxSeconds);
+      }
+
+      // 上下の揺れ（ゆるいbob）＋ ときどき下へ突っ込む（diveOffset）
       boss.bobPhase += 0.04;
-      boss.y = boss.baseY + Math.sin(boss.bobPhase) * CONFIG.bossBobAmp;
+      if (boss.diving) {
+        // sin(0→π) で 0→1→0 の山を描き、下に降りてスッと戻る
+        boss.diveT += 1 / (CONFIG.bossDiveDurationSeconds * 60);
+        if (boss.diveT >= 1) {
+          boss.diving = false;
+          boss.diveT = 0;
+          boss.diveOffset = 0;
+          boss.diveTimer = randSecFrames(CONFIG.bossDiveIntervalMinSeconds, CONFIG.bossDiveIntervalMaxSeconds);
+        } else {
+          boss.diveOffset = Math.sin(boss.diveT * Math.PI) * CONFIG.bossDiveDepth;
+        }
+      } else {
+        boss.diveTimer--;
+        if (boss.diveTimer <= 0) { boss.diving = true; boss.diveT = 0; }
+      }
+      boss.y = boss.baseY + Math.sin(boss.bobPhase) * CONFIG.bossBobAmp + boss.diveOffset;
+
       if (boss.flash > 0) boss.flash--;
       if (boss.hitCooldown > 0) boss.hitCooldown--;
 
