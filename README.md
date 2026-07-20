@@ -140,8 +140,20 @@
 | `index.html` | HTML・CSSだけの骨組み。`game.js`→`tutorial.js` の順に読み込む |
 | `game.js` | ゲーム本体（設定・状態・物理演算・描画・音） |
 | `tutorial.js` | チュートリアルモード。`game.js` の仕組みをそのまま使う「上乗せレイヤー」 |
+| `tests/` | Node だけで動くヘッドレスのリグレッションテスト（ブラウザ不要） |
 
 `<script src="...">` による普通の読み込み（モジュールではない）なので、`index.html` を直接ダブルクリックして開くだけで動きます。
+
+## テスト
+
+`tests/` 以下に、ブラウザなしで `game.js`/`tutorial.js` のロジックを検証するテストがあります（Node標準機能のみ、npm install不要）。
+
+```
+node tests/run-all.js
+```
+
+で `tests/test_*.js` を全部まとめて実行します。1本だけ実行したい場合は `node tests/test_ranking.js` のように直接指定できます。
+プルリクエストを作成・更新すると、GitHub Actions（`.github/workflows/test.yml`）が自動でこのテストと構文チェック（`node --check`）を実行します。
 
 ## コードの読み方（学習メモ）
 

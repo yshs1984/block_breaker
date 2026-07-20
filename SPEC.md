@@ -17,6 +17,15 @@
 | `index.html` | HTML・CSSの骨組みのみ。`<script src="game.js">` → `<script src="tutorial.js">` の順に読み込む |
 | `game.js` | ゲーム本体（設定・状態・入力・物理演算・描画・音） |
 | `tutorial.js` | チュートリアルモード。`game.js` の関数・変数（同じグローバルスコープ）を利用する上乗せレイヤー |
+| `tests/` | ヘッドレスリグレッションテスト（後述） |
+
+## テスト（`tests/`）
+
+- ブラウザ・canvas無しで `game.js`/`tutorial.js` のロジックを検証する、Node標準機能のみのテスト（npm installやビルド不要）。
+- `tests/harness.js`: `document`/`window`/`localStorage`/canvasの `ctx` を最小限のスタブで用意し、`game.js`→`tutorial.js`の順にソースを文字列連結して `vm.runInThisContext()` で1つのスクリプトとして実行する。トップレベルの `const`/`function` は同じ `vm` 呼び出しの中でしかアクセスできないため、末尾に `global.__test_exports = {...}` を連結してテスト側から参照できるようにする（`loadGame()` がこの一連の処理をまとめて行い、必要な名前だけを返す）。
+- `tests/test_*.js`: 各Issue・PRごとに1ファイル。`assert()` ヘルパーで検証し、1つでも失敗すると非ゼロで終了する。
+- `tests/run-all.js`: `tests/test_*.js` を全部まとめて実行する簡易ランナー（`node tests/run-all.js`）。
+- `.github/workflows/test.yml`: `pull_request`（対 `main`）と `main` への `push` をトリガーに、`node --check` による構文チェックと `node tests/run-all.js` を実行するGitHub Actions。
 
 ## 操作
 

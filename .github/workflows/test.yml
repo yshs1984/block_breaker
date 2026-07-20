@@ -1,0 +1,25 @@
+name: テスト
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: 構文チェック（game.js / tutorial.js）
+        run: |
+          node --check game.js
+          node --check tutorial.js
+
+      - name: ヘッドレスリグレッションテスト（tests/test_*.js）
+        run: node tests/run-all.js
