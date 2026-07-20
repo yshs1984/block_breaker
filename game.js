@@ -1123,31 +1123,35 @@
   }
 
   // ボス本体を描く（グラデーションの体＋上部のトゲ＋ボールを追う目）。HPバーは呼び出し側で描く。
-  function drawBoss(boss) {
-    const flashing = boss.flash > 0;
-    const cx = boss.x + boss.w / 2;
-
-    // ギザギザの輪郭（トゲの長さは固定パターン。毎フレーム乱数だとチラつくため）
-    // 上辺・下辺それぞれに不揃いなトゲを生やし、「軟らかい角丸」ではない禍々しいシルエットにする
-    const topJags = [14, 26, 12, 30, 10, 24, 16];    // 上辺のトゲの高さ（左から順）
-    const bottomJags = [10, 18, 8, 20, 12, 16, 9];   // 下辺の牙状のトゲの長さ
-    const n = topJags.length;
+  // ボスのギザギザ輪郭を ctx にパスとして引く（本体の塗りとシールドの線で使い回す）。
+  // トゲの長さは固定パターン（毎フレーム乱数だとチラつくため）。上辺・下辺に不揃いなトゲを生やし、
+  // 「軟らかい角丸」ではない禍々しいシルエットにする。
+  const BOSS_TOP_JAGS = [14, 26, 12, 30, 10, 24, 16];    // 上辺のトゲの高さ（左から順）
+  const BOSS_BOTTOM_JAGS = [10, 18, 8, 20, 12, 16, 9];   // 下辺の牙状のトゲの長さ
+  function traceBossOutline(boss) {
+    const n = BOSS_TOP_JAGS.length;
     const stepW = boss.w / n;
-
     ctx.beginPath();
     // 上辺（左→右へ、山谷を交互に）
     ctx.moveTo(boss.x, boss.y + 6);
     for (let i = 0; i < n; i++) {
-      ctx.lineTo(boss.x + stepW * (i + 0.5), boss.y - topJags[i]);
+      ctx.lineTo(boss.x + stepW * (i + 0.5), boss.y - BOSS_TOP_JAGS[i]);
       ctx.lineTo(boss.x + stepW * (i + 1), boss.y + 6);
     }
     // 右辺 → 下辺（右→左へ、下向きの牙）
     ctx.lineTo(boss.x + boss.w, boss.y + boss.h - 6);
     for (let i = n - 1; i >= 0; i--) {
-      ctx.lineTo(boss.x + stepW * (i + 0.5), boss.y + boss.h + bottomJags[i]);
+      ctx.lineTo(boss.x + stepW * (i + 0.5), boss.y + boss.h + BOSS_BOTTOM_JAGS[i]);
       ctx.lineTo(boss.x + stepW * i, boss.y + boss.h - 6);
     }
     ctx.closePath();
+  }
+
+  function drawBoss(boss) {
+    const flashing = boss.flash > 0;
+    const cx = boss.x + boss.w / 2;
+
+    traceBossOutline(boss);
 
     // 脈動する赤いオーラ（ゆっくり明滅して「生きている」不気味さを出す）
     const pulse = 0.5 + 0.5 * Math.sin(Date.now() / 250);
@@ -1228,17 +1232,22 @@
       ctx.fill();
     }
 
-    // 突っ込み中はシールドを表示（この間は無敵＝当ててもダメージが入らないことを伝える）
+    // 突っ込み中はシールドを表示（この間は無敵＝当ててもダメージが入らないことを伝える）。
+    // ただの楕円ではなく、ボスのギザギザ輪郭を一回り大きくなぞって「体を包むバリア」に見せる。
     if (boss.diving) {
       const shieldPulse = 0.5 + 0.5 * Math.sin(Date.now() / 80);
+      const bossCy = boss.y + boss.h / 2;
+      const scale = 1.14 + shieldPulse * 0.05; // 脈動で少し伸縮
       ctx.save();
-      ctx.strokeStyle = `rgba(120, 210, 255, ${0.5 + shieldPulse * 0.4})`;
-      ctx.lineWidth = 3;
+      // ボス中心を基準に輪郭を拡大してなぞる（ギザギザのシルエットのまま一回り大きくなる）
+      ctx.translate(cx, bossCy);
+      ctx.scale(scale, scale);
+      ctx.translate(-cx, -bossCy);
+      traceBossOutline(boss);
+      ctx.strokeStyle = `rgba(120, 210, 255, ${0.55 + shieldPulse * 0.35})`;
+      ctx.lineWidth = 2.5 / scale; // 拡大の影響を打ち消して線幅を一定に見せる
       ctx.shadowColor = "#78d2ff";
       ctx.shadowBlur = 14 + shieldPulse * 10;
-      const pad = 10 + shieldPulse * 4;
-      ctx.beginPath();
-      ctx.ellipse(cx, boss.y + boss.h / 2, boss.w / 2 + pad, boss.h / 2 + pad, 0, 0, Math.PI * 2);
       ctx.stroke();
       ctx.restore();
     }
