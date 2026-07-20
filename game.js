@@ -580,6 +580,15 @@
         nearest = b;
       }
     }
+    // ボスステージ中は通常ブロックが無いので、ボスもホーミングの対象にする
+    if (game.boss) {
+      const cx = game.boss.x + game.boss.w / 2, cy = game.boss.y + game.boss.h / 2;
+      const dist = (cx - ball.x) * (cx - ball.x) + (cy - ball.y) * (cy - ball.y);
+      if (dist < nearestDist) {
+        nearestDist = dist;
+        nearest = game.boss;
+      }
+    }
     return nearest;
   }
 
