@@ -98,7 +98,7 @@
     bossBobAmp: 14,        // ボスの上下の揺れ幅（ピクセル）
     bossDefeatBonus: 500,  // ボスを倒したときのスコアボーナス
     bossPowerHitDamage: 3, // パワーヒット中にボスへ当てたときのダメージ（通常は1）
-    bossHitCooldownSeconds: 0.4, // ボスが連続でダメージを受けない最短間隔（上の壁との隙間で往復してHPが激減するのを防ぐ）
+    bossHitCooldownSeconds: 0.8, // ボスが連続でダメージを受けない最短間隔（上の壁との隙間で往復してHPが激減するのを防ぐ）
     bossBlockIntervalSeconds: 4, // ボスが新しいブロックを放出する間隔（秒）
     bossBlockCount: 2,           // 1回の放出で出てくるブロックの数
     bossBlockMaxOnField: 6,      // 場に残っているブロックがこの数以上あれば、その回の放出はスキップする
