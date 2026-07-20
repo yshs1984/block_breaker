@@ -79,6 +79,18 @@
 - `startNewGame()` / `nextStage()` で `game.obstacle = null` にリセットし、`obstacleSpawnTimer` を新しい乱数で再セットする（ステージ間・新規ゲームで持ち越さない）
 - 描画色は紫 `#6c3fc5`
 
+## ボスステージ（`game.boss`、Issue #28）
+
+- `isBossStage(stage)` は `stage % bossStageInterval === 0`（既定5。ステージ5, 10, 15…）で判定する。
+- `buildBricks()` はボスステージのとき通常のブロック配置ロジックを実行せず、`game.bricks = []` にした上で `createBoss()` を1体だけ生成して `game.boss` にセットする（通常ステージでは `game.boss = null`）。
+- `createBoss()`: サイズ180×50px、画面上部中央（`y=110`固定、`bobPhase`で上下に揺れる）に生成。HPは `bossNumber = stage / bossStageInterval`（1体目, 2体目…）から `min(bossBaseHp + (bossNumber-1) * bossHpPerDefeat, bossHpMax)`（既定: 15, +5ずつ, 上限40）で決める。
+- 移動: `dx`（`bossSpeed`、既定2.2）で左右移動し画面端で反転、`bobPhase` を毎フレーム進めて `y = baseY + sin(bobPhase) * bossBobAmp`（既定14px）で上下にも揺れる（フラフラ障害物と同じ仕組み）。
+- 被弾: `circleRectHit(ball, boss)` で命中したら `hp--`・`flash=10`（描画を10フレーム白くする演出用カウンタ）・`spawnParticles()`・`soundClang()`。通常ブロックと同じ確率（`itemDropChance`）でアイテムも落とす。壊れないブロックと同じく `reflectBallOffRect()` で必ず跳ね返す（**貫通中・パワーヒット中でもすり抜けない**＝1フレーム1ダメージに固定）。
+- 撃破（`hp <= 0`）: `game.score += bossDefeatBonus`（既定500）、撃破エフェクト・`soundBossDefeat()`、`game.boss = null`、`game.stageTimes.push(game.stageTime)`（通常のステージクリアと同じ記録）、`game.state = "clear"` に遷移（以降はスペースキーで `nextStage()` へ、既存の流れと同じ）。
+- ボスステージ中はフラフラ障害物を出現させない（`game.stage >= floatingObstacleStartStage` の判定に `&& !game.boss` を追加）。
+- **注意点**: 通常の「ステージクリア判定」（`game.bricks.every(...)`）は、ボスステージでは `game.bricks` が空配列のため `every()` が常に `true` を返してしまう（空配列の仕様）。誤発火を防ぐため、この判定に `&& !game.boss` を追加している。
+- 画面表示: ボスは被弾直後だけ白、通常時は `#8b1e3f`。ボスの少し上にHPバー（`hp / maxHp` の割合で塗る）を表示する。
+
 ## スコア・残機・ステージ
 
 - スコア: ブロック破壊で基本+10（コンボ加算あり、後述）、`bonus` アイテムで+100

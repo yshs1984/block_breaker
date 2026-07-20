@@ -86,6 +86,15 @@
 
     // --- コンボ ---
     comboBonusPerHit: 5,    // コンボが1伸びるごとに、その1個の得点に追加される点数
+
+    // --- ボスステージ ---
+    bossStageInterval: 5, // このステージ数ごとにボスステージになる（5, 10, 15...）
+    bossBaseHp: 15,        // 1体目のボスのHP
+    bossHpPerDefeat: 5,    // ボスを倒すたびに次のボスのHPがこれだけ増える
+    bossHpMax: 40,         // ボスHPの上限（際限なく増えて倒せなくならないように）
+    bossSpeed: 2.2,        // ボスの左右移動速度
+    bossBobAmp: 14,        // ボスの上下の揺れ幅（ピクセル）
+    bossDefeatBonus: 500,  // ボスを倒したときのスコアボーナス
   };
 
   // ブロックの色（行ごとに変えると見た目が楽しい）
@@ -147,6 +156,7 @@
     powerHits: 0,    // パワーヒットで残り何個、反射せず壊せるか
     paddleRecoil: 0, // パドルがボールを弾いたときの反動（見た目だけの下げ幅）
     combo: 0,        // パドルから離れてから戻るまでの間に連続で壊したブロック数
+    boss: null,      // ボスステージ中だけ存在（{x,y,w,h,hp,maxHp,dx,baseY,bobPhase,flash}）。null なら非ボスステージ
     paused: false,   // ポーズ中かどうか
     obstacle: null,        // フラフラ動く障害物（1個だけ存在。null なら非表示）
     obstacleSpawnTimer: 0, // 次に出現するまでの残りフレーム数
@@ -199,6 +209,7 @@
   const soundPower   = () => { beep(300,0.05,"sawtooth"); setTimeout(()=>beep(600,0.1,"sawtooth"),50); }; // パワーヒット発動
   const soundLifeUp  = () => { beep(660,0.1,"triangle"); setTimeout(()=>beep(880,0.12,"triangle"),100); setTimeout(()=>beep(1320,0.18,"triangle"),220); }; // 残機が増えた瞬間（♥アイテム・スコアボーナス共通。気づきやすいよう長めの3音ファンファーレ）
   const soundClang   = () => beep(200, 0.08, "square", 0.08); // 壊れない障害物にぶつかったときの硬い音
+  const soundBossDefeat = () => { beep(392,0.12,"triangle"); setTimeout(()=>beep(523,0.12,"triangle"),120); setTimeout(()=>beep(659,0.12,"triangle"),240); setTimeout(()=>beep(880,0.2,"triangle"),360); }; // ボス撃破（4音の大きめファンファーレ）
 
   // ==================================================================
   //  セットアップ（配置し直す）系の関数
@@ -228,8 +239,41 @@
     game.ball.dy = -speed;
   }
 
-  // ブロックを並べる。ステージが上がると行が増えて難しくなる
+  // このステージがボスステージかどうか（bossStageInterval ごとに true になる）
+  function isBossStage(stage) {
+    return stage % CONFIG.bossStageInterval === 0;
+  }
+
+  // ボスを1体生成する。倒した体数（＝ステージ番号から逆算）が増えるほどHPも増える（上限あり）
+  function createBoss() {
+    const bossNumber = game.stage / CONFIG.bossStageInterval; // 1体目, 2体目...
+    const hp = Math.min(
+      CONFIG.bossBaseHp + (bossNumber - 1) * CONFIG.bossHpPerDefeat,
+      CONFIG.bossHpMax
+    );
+    const w = 180, h = 50;
+    const baseY = 110;
+    return {
+      x: (W - w) / 2,
+      y: baseY,
+      baseY,
+      w, h,
+      hp,
+      maxHp: hp,
+      dx: CONFIG.bossSpeed,
+      bobPhase: 0,
+      flash: 0, // 被弾直後、白く光らせる残りフレーム数
+    };
+  }
+
+  // ブロックを並べる。ステージが上がると行が増えて難しくなる（ボスステージはブロックの代わりにボスを1体配置する）
   function buildBricks() {
+    if (isBossStage(game.stage)) {
+      game.bricks = [];
+      game.boss = createBoss();
+      return;
+    }
+    game.boss = null;
     game.bricks = [];
     // ステージごとに1行増えるが、brickMaxRows で頭打ちにする
     // （上限が無いと遠いステージでブロックがパドルの可動域まで埋め尽くしてしまうため。Issue #15）
@@ -661,8 +705,8 @@
     // 上の壁で反射
     if (ball.y - ball.r < 0) { ball.y = ball.r; ball.dy *= -1; soundBounce(); }
 
-    // --- フラフラ障害物（ステージが十分進むと出現。壊れない） ---
-    if (game.state === "playing" && game.stage >= CONFIG.floatingObstacleStartStage) {
+    // --- フラフラ障害物（ステージが十分進むと出現。壊れない。ボスステージ中は出現しない） ---
+    if (game.state === "playing" && game.stage >= CONFIG.floatingObstacleStartStage && !game.boss) {
       if (game.obstacle) {
         const ob = game.obstacle;
         // 左右に動き、画面端で跳ね返る
@@ -696,6 +740,37 @@
             bobPhase: 0,
             life: CONFIG.floatingObstacleLifeSeconds * 60,
           };
+        }
+      }
+    }
+
+    // --- ボス（ボスステージ中だけ存在。左右＋上下に動き回り、当てるとHPが減る） ---
+    if (game.boss) {
+      const boss = game.boss;
+      boss.x += boss.dx;
+      if (boss.x < 0) { boss.x = 0; boss.dx *= -1; }
+      if (boss.x + boss.w > W) { boss.x = W - boss.w; boss.dx *= -1; }
+      boss.bobPhase += 0.04;
+      boss.y = boss.baseY + Math.sin(boss.bobPhase) * CONFIG.bossBobAmp;
+      if (boss.flash > 0) boss.flash--;
+      if (circleRectHit(ball, boss)) {
+        boss.hp--;
+        boss.flash = 10;
+        spawnParticles(ball.x, ball.y, "#ff6b6b");
+        soundClang();
+        // 通常のブロックと同じ確率でアイテムを落とす（貫通・パワーヒットを駆使して戦える）
+        if (Math.random() < CONFIG.itemDropChance) {
+          spawnItem(ball.x, ball.y);
+        }
+        // 壊れないブロックと同じく、貫通・パワーヒット中でも必ず跳ね返す（1フレームに1ダメージ）
+        reflectBallOffRect(ball, boss);
+        if (boss.hp <= 0) {
+          game.score += CONFIG.bossDefeatBonus;
+          spawnParticles(boss.x + boss.w / 2, boss.y + boss.h / 2, "#ff6b6b");
+          soundBossDefeat();
+          game.boss = null;
+          game.stageTimes.push(game.stageTime); // 通常のステージクリアと同様に記録する
+          game.state = "clear";
         }
       }
     }
@@ -825,7 +900,9 @@
     }
 
     // --- ステージクリア判定（壊れないブロックを除き、残っているブロックが無い。本編プレイ中だけ判定する） ---
-    if (game.state === "playing" && game.bricks.every((b) => !b.alive || b.indestructible)) {
+    // ボスステージ中は game.bricks が空配列（every() が空配列で常に true になる）なので、
+    // ボスを倒すまでこの判定が誤発火しないよう !game.boss を条件に含める。
+    if (game.state === "playing" && !game.boss && game.bricks.every((b) => !b.alive || b.indestructible)) {
       game.stageTimes.push(game.stageTime); // クリアした瞬間の経過時間を記録
       game.state = "clear";
       soundClear();
@@ -1019,6 +1096,18 @@
     // フラフラ障害物（壊れない。存在感のある色で表示）
     if (game.obstacle) {
       drawRoundRect(game.obstacle.x, game.obstacle.y, game.obstacle.w, game.obstacle.h, 6, "#6c3fc5");
+    }
+
+    // ボス（ボスステージのみ。被弾直後は白く光り、少し上にHPバーを表示）
+    if (game.boss) {
+      const boss = game.boss;
+      drawRoundRect(boss.x, boss.y, boss.w, boss.h, 10, boss.flash > 0 ? "#ffffff" : "#8b1e3f");
+      const hpBarW = boss.w, hpBarH = 8;
+      const hpx = boss.x, hpy = boss.y - 16;
+      ctx.fillStyle = "rgba(255,255,255,0.15)";
+      ctx.fillRect(hpx, hpy, hpBarW, hpBarH);
+      ctx.fillStyle = "#ff6b6b";
+      ctx.fillRect(hpx, hpy, hpBarW * (boss.hp / boss.maxHp), hpBarH);
     }
 
     // エフェクトの粒
