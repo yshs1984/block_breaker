@@ -154,7 +154,6 @@
     lives: CONFIG.startLives,
     stage: 1,
     stageTime: 0,    // 今のステージの経過フレーム数（表示は formatTime() で M:SS に変換）
-    stageTimes: [],  // このプレイでクリアした各ステージの所要フレーム数（クリアした順）
     _rankingCache: [], // gameover 遷移時に読み込んだランキングを draw() で使い回すキャッシュ
     _lifeBonusNextScore: 2000, // 次に残機+1になるスコアのライン（startNewGame()で lifeBonusScore にリセット）
     paddle: { x: 0, y: 0, w: 0, h: 0 },
@@ -434,7 +433,6 @@
     game._lifeBonusNextScore = CONFIG.lifeBonusScore;
     game.stage = startStage;
     game.stageTime = 0;
-    game.stageTimes = [];
     resetPaddle();
     buildBricks();
     resetBall();
@@ -916,7 +914,6 @@
           soundBossDefeat();
           game.boss = null;
           game.bossObstacles = []; // クリア画面に障害物が残らないよう片付ける
-          game.stageTimes.push(game.stageTime); // 通常のステージクリアと同様に記録する
           game.state = "clear";
         }
       }
@@ -1085,7 +1082,6 @@
     // ボスステージ中は game.bricks が空配列（every() が空配列で常に true になる）なので、
     // ボスを倒すまでこの判定が誤発火しないよう !game.boss を条件に含める。
     if (game.state === "playing" && !game.boss && game.bricks.every((b) => !b.alive || b.indestructible)) {
-      game.stageTimes.push(game.stageTime); // クリアした瞬間の経過時間を記録
       game.state = "clear";
       soundClear();
     }
@@ -1105,13 +1101,6 @@
   // ==================================================================
   //  ローカルランキング（localStorage。このブラウザ内だけの自己ベスト一覧）
   // ==================================================================
-
-  // ステージ別タイムを短い文字列にする（例 "0:23 / 0:41 / 0:55…"）。0件なら "(クリアなし)"
-  function formatStageList(times, max) {
-    if (times.length === 0) return "(クリアなし)";
-    const shown = times.slice(0, max).map(formatTime).join(" / ");
-    return times.length > max ? shown + "…" : shown;
-  }
 
   // localStorage は file:// や設定によっては使えない環境があるため、失敗しても静かに諦める
   function loadRanking() {
@@ -1134,7 +1123,7 @@
   // ゲームオーバーに遷移した瞬間に1回呼ぶ。今回のプレイをランキングに追加し、上位だけ残す
   function recordGameOverRanking() {
     const list = loadRanking();
-    list.push({ score: game.score, stageTimes: [...game.stageTimes] });
+    list.push({ score: game.score, maxCombo: game.maxCombo, stagesCleared: game.stage - 1 });
     list.sort((a, b) => b.score - a.score);
     const top = list.slice(0, CONFIG.rankingMaxEntries);
     saveRanking(top);
@@ -1419,18 +1408,20 @@
     ctx.textAlign = "start";
   }
 
-  // ゲームオーバー画面：今回のステージ別クリアタイムと、ローカル保存のベスト5を表示
+  // ゲームオーバー画面：今回のスコア・最大コンボと、ローカル保存のベスト5を表示
   function drawGameOverStats() {
     const lines = [];
     lines.push(["今回のスコア " + game.score + "点（" + (game.stage - 1) + "面クリア）", "#e6e9f0"]);
-    lines.push([formatStageList(game.stageTimes, 6), "#9aa4bb"]);
+    lines.push(["最大コンボ ×" + game.maxCombo, "#9aa4bb"]);
     lines.push(["ベスト" + CONFIG.rankingMaxEntries + "（このブラウザ内）", "#ffd166"]);
     if (game._rankingCache.length === 0) {
       lines.push(["まだ記録がありません", "#9aa4bb"]);
     } else {
       game._rankingCache.forEach((entry, i) => {
-        lines.push([(i + 1) + "位　" + entry.score + "点（" + entry.stageTimes.length + "面）", "#e6e9f0"]);
-        lines.push([formatStageList(entry.stageTimes, 6), "#9aa4bb"]);
+        // 旧バージョン（stageTimesのみ保存）で記録されたデータでもエラーにならないようフォールバックする
+        const stages = entry.stagesCleared ?? (entry.stageTimes ? entry.stageTimes.length : 0);
+        const combo = entry.maxCombo ?? 0;
+        lines.push([(i + 1) + "位　" + entry.score + "点（" + stages + "面・最大コンボ×" + combo + "）", "#e6e9f0"]);
       });
     }
     ctx.textAlign = "center";
