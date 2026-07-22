@@ -51,7 +51,7 @@
     powerBrickCount: 2,     // パワーヒットで反射せず連続で壊せるブロック数
     powerBoostSeconds: 0.4, // パワーヒット直後、ボールが速くなる時間（秒）
     powerBoostMult: 1.6,    // その間のボール速度の倍率
-    powerCooldownSeconds: 10, // パワーヒット発動後、再び発動できるようになるまでの時間（秒）
+    powerCooldownSeconds: 5,  // パワーヒット発動後、再び発動できるようになるまでの時間（秒。旧10秒は爽快感に欠けるため短縮）
 
     // --- パドルの反動（ボールを弾いたとき後ろに下がる演出）関連 ---
     paddleRecoilBase: 10,   // 通常ヒットの基本反動（ピクセル）
