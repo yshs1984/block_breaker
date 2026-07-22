@@ -171,6 +171,7 @@
     powerHits: 0,    // パワーヒットで残り何個、反射せず壊せるか
     paddleRecoil: 0, // パドルがボールを弾いたときの反動（見た目だけの下げ幅）
     combo: 0,        // パドルから離れてから戻るまでの間に連続で壊したブロック数
+    maxCombo: 0,     // このプレイでの最大コンボ数（ステージをまたいでも保持。startNewGame()でのみリセット）
     boss: null,      // ボスステージ中だけ存在（{x,y,w,h,hp,maxHp,dx,baseY,bobPhase,flash,hitCooldown}）。null なら非ボスステージ
     bossObstacles: [], // ボス戦中だけ漂う障害物（回が進むほど増える）。通常ステージの game.obstacle とは別物
     paused: false,   // ポーズ中かどうか
@@ -444,6 +445,7 @@
     game.powerHits = 0;
     game.paddleRecoil = 0;
     game.combo = 0;
+    game.maxCombo = 0;
     game.paused = false;
     game.obstacle = null;
     game.obstacleSpawnTimer = randomObstacleGap();
@@ -1022,6 +1024,8 @@
         break; // 1フレームで壊すのは1個まで（挙動が安定する）
       }
     }
+    // このプレイでの最大コンボを更新（通常ブロック・壊れないブロックどちらの破壊でも、ここでまとめて捉える）
+    if (game.combo > game.maxCombo) game.maxCombo = game.combo;
 
     // --- 落下中のアイテムを動かす／パドルで取る ---
     for (const it of game.items) {
@@ -1546,6 +1550,13 @@
     ctx.fillText("STAGE " + game.stage + "  " + formatTime(game.stageTime), W / 2, 26);
     ctx.textAlign = "right";
     ctx.fillText("LIFE " + "♥".repeat(Math.max(0, game.lives)), W - 12, 26);
+    // このプレイでの最大コンボ（2以上の間だけ、右上のLIFEの下に小さく表示）
+    if (game.maxCombo >= 2) {
+      ctx.fillStyle = "#9aa4bb";
+      ctx.font = "13px system-ui, sans-serif";
+      ctx.textAlign = "right";
+      ctx.fillText("MAX COMBO " + game.maxCombo, W - 12, 46);
+    }
     ctx.textAlign = "left";
 
     // 発動中の時間効果を小さく表示（残り秒つき）
