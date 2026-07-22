@@ -354,7 +354,13 @@
     game.bricks = [];
     // ステージごとに1行増えるが、brickMaxRows で頭打ちにする
     // （上限が無いと遠いステージでブロックがパドルの可動域まで埋め尽くしてしまうため。Issue #15）
-    const rows = Math.min(CONFIG.brickRows + (game.stage - 1), CONFIG.brickMaxRows);
+    // ボスステージ（ブロックが無い）は「通過したブロックステージ数」に数えない。そうしないと
+    // ボスを挟むたびに行数がプレイヤー視点で+2に感じてしまうため（Issue #41）。
+    const bossStagesBefore = Math.floor((game.stage - 1) / CONFIG.bossStageInterval);
+    const rows = Math.min(
+      CONFIG.brickRows + (game.stage - 1 - bossStagesBefore),
+      CONFIG.brickMaxRows
+    );
     const cols = CONFIG.brickCols;
     const gap = CONFIG.brickGap;
     const totalGap = gap * (cols + 1);
