@@ -23,6 +23,8 @@
     paddleSpeed: 7,      // パドルの動く速さ（左右）
     paddleVertSpeed: 5,  // パドルの動く速さ（前後＝上下）
     paddleForwardRatio: 2 / 3, // パドルが前に出られる上限（画面の高さに対する割合。下側1/3まで）
+    touchPaddleYOffset: 50, // ドラッグ中、指の位置よりどれだけ上にパドルを置くか（指でパドルが隠れないように）
+    touchFollowRate: 0.35,  // ドラッグ中、毎フレーム目標位置とのズレの何割ぶん近づくか（1に近いほど瞬間移動に近くなる）
     ballRadius: 8,       // ボールの大きさ（半径）
     ballSpeed: 4.2,      // ボールの基本スピード（ステージが上がると少し速くなる）
     speedUpPerStage: 0.35,// 1ステージごとに増えるスピード（旧0.6。ステージ5以降が急激に難しくなりすぎるため緩和）
@@ -575,18 +577,16 @@
         && pt.y >= TUTORIAL_BUTTON_HIT.y && pt.y <= TUTORIAL_BUTTON_HIT.y + TUTORIAL_BUTTON_HIT.h;
   }
 
-  // ドラッグしている指の位置へ、パドルを直接移動する（キー入力の速度移動とは別方式）
+  // ドラッグしている指の位置から、パドルの目標位置を決める（瞬間移動ではなく、update()で少しずつ近づける）
   let pointerActive = false;
-  function movePaddleTo(pt) {
-    const pad = game.paddle;
-    pad.x = pt.x - pad.w / 2;
-    pad.y = pt.y - pad.h / 2;
-    if (pad.x < 0) pad.x = 0;
-    if (pad.x + pad.w > W) pad.x = W - pad.w;
-    const forwardLimit = H * CONFIG.paddleForwardRatio;
-    const backLimit = H - 40;
-    if (pad.y < forwardLimit) pad.y = forwardLimit;
-    if (pad.y > backLimit) pad.y = backLimit;
+  let dragTarget = null; // { x, y } または null（ドラッグしていない間）
+  function setDragTarget(pt) {
+    dragTarget = {
+      // Y座標は指の位置そのものではなく、少し上（CONFIG.touchPaddleYOffset分）を狙う。
+      // 指の真下だとパドルが指に隠れて見えなくなるため。
+      x: pt.x - game.paddle.w / 2,
+      y: pt.y - CONFIG.touchPaddleYOffset - game.paddle.h / 2,
+    };
   }
 
   // Pointer Events はタッチ・マウス・ペンを同じAPIで扱えるため、種類による分岐はしない
@@ -627,18 +627,19 @@
     if (game.state === "playing" || game.state === "tutorial") {
       pointerActive = true;
       keys.charge = true; // 触れている間、Shiftを押しっぱなしにしているのと同じ扱い
-      movePaddleTo(pt);
+      setDragTarget(pt);
     }
   });
 
   canvas.addEventListener("pointermove", (e) => {
     if (!pointerActive) return;
     e.preventDefault();
-    movePaddleTo(getCanvasPoint(e));
+    setDragTarget(getCanvasPoint(e));
   });
 
   function endPointer() {
     pointerActive = false;
+    dragTarget = null;
     keys.charge = false;
   }
   canvas.addEventListener("pointerup", endPointer);
@@ -833,6 +834,12 @@
     let paddleVertSpeed = CONFIG.paddleVertSpeed;
     if (game.timers.paddleFast > 0) { paddleSpeed *= 1.6; paddleVertSpeed *= 1.6; }
     if (game.timers.paddleSlow > 0) { paddleSpeed *= 0.6; paddleVertSpeed *= 0.6; }
+
+    // --- ドラッグ中は、指の目標位置へ瞬間移動せず少しずつ近づける ---
+    if (pointerActive && dragTarget) {
+      pad.x += (dragTarget.x - pad.x) * CONFIG.touchFollowRate;
+      pad.y += (dragTarget.y - pad.y) * CONFIG.touchFollowRate;
+    }
 
     // --- パドルを動かす（左右） ---
     if (keys.left)  pad.x -= paddleSpeed;
