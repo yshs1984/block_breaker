@@ -14,6 +14,10 @@
   const W = canvas.width;   // 横幅 480
   const H = canvas.height;  // 高さ 640
 
+  // 表示用バージョン（"1.0.<マージされたPRの番号>"）。GitHub Pagesが最新化されたかを
+  // タイトル画面で見分けられるように、変更を含むPRごとに手動で更新する。
+  const VERSION = "1.0.61";
+
   // ------------------------------------------------------------------
   //  調整できる設定（ここの数字を変えると難易度・見た目が変わります）
   // ------------------------------------------------------------------
@@ -1661,6 +1665,12 @@
       drawCenterText("ブロック崩し", "スペースキーで本編スタート");
       if (game.debugMode) drawDebugPanel();
       else drawReadyHint();
+      // GitHub Pagesが最新化されたかを見分けられるよう、バージョンを小さく表示する
+      ctx.fillStyle = "#6c7486";
+      ctx.font = "11px system-ui, sans-serif";
+      ctx.textAlign = "right";
+      ctx.fillText("v" + VERSION, W - 8, H - 8);
+      ctx.textAlign = "left";
     } else if (game.state === "gameover") {
       drawCenterText("ゲームオーバー", "スペースキーでもう一度");
       drawGameOverStats();
