@@ -25,6 +25,8 @@
     paddleForwardRatio: 2 / 3, // パドルが前に出られる上限（画面の高さに対する割合。下側1/3まで）
     touchPaddleYOffset: 50, // ドラッグ中、指の位置よりどれだけ上にパドルを置くか（指でパドルが隠れないように）
     touchFollowRate: 0.35,  // ドラッグ中、毎フレーム目標位置とのズレの何割ぶん近づくか（1に近いほど瞬間移動に近くなる）
+    debugTapRequiredCount: 5, // ポーズ中にポーズボタンを何回連続タップすると隠しデバッグモードに入るか
+    debugTapWindowMs: 3000,   // 連続タップとみなす制限時間（この間隔を空けるとカウントがリセットされる）
     ballRadius: 8,       // ボールの大きさ（半径）
     ballSpeed: 4.2,      // ボールの基本スピード（ステージが上がると少し速くなる）
     speedUpPerStage: 0.35,// 1ステージごとに増えるスピード（旧0.6。ステージ5以降が急激に難しくなりすぎるため緩和）
@@ -577,6 +579,17 @@
         && pt.y >= TUTORIAL_BUTTON_HIT.y && pt.y <= TUTORIAL_BUTTON_HIT.y + TUTORIAL_BUTTON_HIT.h;
   }
 
+  // デバッグパネルの「開始ステージ」を±するボタンの当たり判定領域（隠しデバッグモード用）
+  const DEBUG_STAGE_MINUS_HIT = { x: W / 2 - 130, y: H / 2 + 68, w: 50, h: 36 };
+  const DEBUG_STAGE_PLUS_HIT  = { x: W / 2 + 80,  y: H / 2 + 68, w: 50, h: 36 };
+  function isInRect(pt, r) {
+    return pt.x >= r.x && pt.x <= r.x + r.w && pt.y >= r.y && pt.y <= r.y + r.h;
+  }
+
+  // ポーズ中にポーズボタンを連続タップした回数（隠しデバッグモードに入るためのカウンタ）
+  let debugTapCount = 0;
+  let debugTapLastTime = 0;
+
   // ドラッグしている指の位置から、パドルの目標位置を決める（瞬間移動ではなく、update()で少しずつ近づける）
   let pointerActive = false;
   let dragTarget = null; // { x, y } または null（ドラッグしていない間）
@@ -597,10 +610,21 @@
     const pt = getCanvasPoint(e);
 
     if (game.state === "ready") {
+      if (game.debugMode) {
+        // デバッグモード中は◀▶で開始ステージを変更、それ以外のタップで選んだステージから開始
+        if (isInRect(pt, DEBUG_STAGE_MINUS_HIT)) {
+          game.debugStartStage = Math.max(1, game.debugStartStage - 1);
+        } else if (isInRect(pt, DEBUG_STAGE_PLUS_HIT)) {
+          game.debugStartStage = Math.min(CONFIG.debugMaxStage, game.debugStartStage + 1);
+        } else {
+          startNewGame(game.debugStartStage);
+        }
+        return;
+      }
       if (isInTutorialButton(pt)) {
         startTutorial(); // tutorial.js で定義
       } else {
-        startNewGame(game.debugMode ? game.debugStartStage : 1);
+        startNewGame(1);
       }
       return;
     }
@@ -613,9 +637,27 @@
     }
 
     if (game.paused) {
-      // ポーズ中は画面のどこをタップしても再開する（狙いを付けなくてよいよう緩くする）
+      if ((game.state === "playing" || game.state === "tutorial") && isInPauseButton(pt)) {
+        // ポーズ中にポーズボタンだけを一定時間内に規定回数連続タップすると、
+        // 隠しデバッグモードとしてタイトル画面（デバッグ用ステージ選択）に切り替わる
+        // （スマホ単体でも動作確認したいステージへ直接ジャンプできるようにするため。Issue #55）
+        const now = Date.now();
+        if (now - debugTapLastTime > CONFIG.debugTapWindowMs) debugTapCount = 0;
+        debugTapCount++;
+        debugTapLastTime = now;
+        if (debugTapCount >= CONFIG.debugTapRequiredCount) {
+          debugTapCount = 0;
+          game.paused = false;
+          game.state = "ready";
+          game.debugMode = true;
+        }
+        return;
+      }
+      // ポーズボタン以外の場所をタップした場合は、今まで通りすぐに再開する
+      // （狙いを付けなくてよいよう緩くする。連打カウントも途切れたのでリセット）
       game.paused = false;
       game._resumes++;
+      debugTapCount = 0;
       return;
     }
     if ((game.state === "playing" || game.state === "tutorial") && isInPauseButton(pt)) {
@@ -1510,10 +1552,13 @@
     ctx.fillText("デバッグモード", W / 2, H / 2 + 56);
     ctx.fillStyle = "#e6e9f0";
     ctx.font = "20px system-ui, sans-serif";
-    ctx.fillText("◀ 開始ステージ " + game.debugStartStage + " ▶", W / 2, H / 2 + 86);
+    // ◀▶は当たり判定領域(DEBUG_STAGE_MINUS_HIT/PLUS_HIT)の中心に合わせて別々に描く
+    ctx.fillText("◀", DEBUG_STAGE_MINUS_HIT.x + DEBUG_STAGE_MINUS_HIT.w / 2, H / 2 + 86);
+    ctx.fillText("開始ステージ " + game.debugStartStage, W / 2, H / 2 + 86);
+    ctx.fillText("▶", DEBUG_STAGE_PLUS_HIT.x + DEBUG_STAGE_PLUS_HIT.w / 2, H / 2 + 86);
     ctx.fillStyle = "#9aa4bb";
     ctx.font = "12px system-ui, sans-serif";
-    ctx.fillText("↑↓ で変更　スペースで開始　D で戻る", W / 2, H / 2 + 110);
+    ctx.fillText("◀▶タップで変更　それ以外をタップで開始", W / 2, H / 2 + 110);
     ctx.textAlign = "start";
   }
 
