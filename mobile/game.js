@@ -175,6 +175,7 @@
     paddleRecoil: 0, // パドルがボールを弾いたときの反動（見た目だけの下げ幅）
     combo: 0,        // パドルから離れてから戻るまでの間に連続で壊したブロック数
     maxCombo: 0,     // このプレイでの最大コンボ数（ステージをまたいでも保持。startNewGame()でのみリセット）
+    ballWaiting: false, // ミス後、パドルに乗って発射待ちの状態か（trueの間はボールが動かず、画面タップで発射する）
     boss: null,      // ボスステージ中だけ存在（{x,y,w,h,hp,maxHp,dx,baseY,bobPhase,flash,hitCooldown}）。null なら非ボスステージ
     bossObstacles: [], // ボス戦中だけ漂う障害物（回が進むほど増える）。通常ステージの game.obstacle とは別物
     paused: false,   // ポーズ中かどうか
@@ -243,20 +244,44 @@
     game.paddle.y = H - 40;
   }
 
-  // ボールをパドルの上に戻し、上向きに撃ち出す準備
-  function resetBall() {
-    // ステージが進むほど速くなるが、ballSpeedCap で頭打ちにする（Issue #19）。
-    // アイテムによる一時的な加速（fast/star/powerBoost）は mult 側で別途かかるので対象外。
-    const speed = Math.min(
+  // 今のステージに応じたボールの基本スピード（ballSpeedCapで頭打ち。Issue #19）。
+  // アイテムによる一時的な加速（fast/star/powerBoost）は mult 側で別途かかるので対象外。
+  function currentBallSpeed() {
+    return Math.min(
       CONFIG.ballSpeed + (game.stage - 1) * CONFIG.speedUpPerStage,
       CONFIG.ballSpeedCap
     );
+  }
+
+  // ボールをパドルの上に戻し、即座に上向きに撃ち出す（ステージ開始・チュートリアルなどで使う）
+  function resetBall() {
+    const speed = currentBallSpeed();
     game.ball.x = game.paddle.x + game.paddle.w / 2;
     game.ball.y = game.paddle.y - game.ball.r - 1;
     // 少し斜め上に飛ばす（左右はランダム）
     const dir = Math.random() < 0.5 ? -1 : 1;
     game.ball.dx = dir * speed * 0.6;
     game.ball.dy = -speed;
+    game.ballWaiting = false;
+  }
+
+  // ボールをパドルの上に乗せ、まだ撃ち出さずに待機させる（ミス後のリスタート用。Issue #50）。
+  // update() 側でパドルに追従させ、画面タップ（launchBall）が押されるまで動かない。
+  function attachBallToPaddle() {
+    game.ball.dx = 0;
+    game.ball.dy = 0;
+    game.ball.x = game.paddle.x + game.paddle.w / 2;
+    game.ball.y = game.paddle.y - game.ball.r - 1;
+    game.ballWaiting = true;
+  }
+
+  // attachBallToPaddle() で待機中のボールを撃ち出す
+  function launchBall() {
+    const speed = currentBallSpeed();
+    const dir = Math.random() < 0.5 ? -1 : 1;
+    game.ball.dx = dir * speed * 0.6;
+    game.ball.dy = -speed;
+    game.ballWaiting = false;
   }
 
   // このステージがボスステージかどうか（bossStageInterval ごとに true になる）
@@ -664,6 +689,11 @@
       debugTapCount = 0;
       return;
     }
+    if (game.state === "playing" && game.ballWaiting) {
+      // ミス後、パドルに乗って発射待ちのボールを画面タップで発射する（Issue #50）
+      launchBall();
+      return;
+    }
     if (game.state === "playing" || game.state === "tutorial") {
       pointerActive = true;
       keys.charge = true; // 触れている間、Shiftを押しっぱなしにしているのと同じ扱い
@@ -896,6 +926,12 @@
     const backLimit = H - 40;
     if (pad.y < forwardLimit) pad.y = forwardLimit;
     if (pad.y > backLimit) pad.y = backLimit;
+
+    // --- 発射待ち（Issue #50）：ボールはパドルに乗ったまま、パドルの動きに追従する ---
+    if (game.ballWaiting) {
+      ball.x = pad.x + pad.w / 2;
+      ball.y = pad.y - ball.r - 1;
+    }
 
     // --- ホーミング（誘導）：効果中は毎フレーム、進行方向を少しずつ最も近いブロックへ向ける ---
     // 速度の大きさ（ball.dx/dyの長さ）は変えず、向きだけを補正する。
@@ -1203,7 +1239,7 @@
           recordGameOverRanking(); // 状態遷移の瞬間に1回だけ、ランキングへ記録する
         } else {
           resetPaddle();
-          resetBall();
+          attachBallToPaddle(); // 即座に発射せず、画面タップで発射するまで待機する（Issue #50）
         }
       } else if (game.state === "tutorial") {
         // 練習中はボールを落としても失敗にならない。パドル上に戻すだけ
@@ -1514,6 +1550,7 @@
       "右上の ❚❚ ボタンでポーズ",
       "ブロックを全部消すと次のステージへ",
       "ボールを落とすと残機が減ります",
+      "ミス後は画面をタップでボールを発射",
     ];
     ctx.textAlign = "center";
     ctx.fillStyle = "#9aa4bb";
@@ -1769,6 +1806,15 @@
       ctx.font = comboFont;
       ctx.textAlign = "center";
       ctx.fillText("COMBO x" + game.combo, W / 2, gy - 10);
+      ctx.textAlign = "left";
+    }
+
+    // 発射待ち中は、ボールのすぐ上に案内を出す（Issue #50）
+    if (game.ballWaiting) {
+      ctx.fillStyle = "#e6e9f0";
+      ctx.font = "14px system-ui, sans-serif";
+      ctx.textAlign = "center";
+      ctx.fillText("画面をタップで発射", game.ball.x, game.ball.y - game.ball.r - 10);
       ctx.textAlign = "left";
     }
 
