@@ -235,12 +235,20 @@
   `keydown`/`keyup` はそのまま残しており、Bluetoothキーボード等を繋いだ場合はキーボード操作も併用できる）。
 - `getCanvasPoint(e)`: `canvas.getBoundingClientRect()` と内部解像度（480×640）の比率から、
   画面上のCSSピクセル座標をキャンバス内部座標に変換する。
-- パドル操作: `movePaddleTo(pt)` で、タップ・ドラッグしている位置へパドル中心を直接移動する
-  （キー入力の「1フレームごとに一定速度で動く」方式とは別の絶対位置指定方式）。クランプ範囲は
-  PC版の左右移動・前後移動と同じ（`x: [0, W-pad.w]`、`y: [H*CONFIG.paddleForwardRatio, H-40]`）。
-  **既知の制約**: `paddleFast`/`paddleSlow`（アイテムによるパドル速度変化）は「1フレームあたりの
-  移動量」に効く仕組みのため、絶対位置指定であるドラッグ操作には効果が無い（ドラッグは常に
-  最速で追従する）。
+- パドル操作（Issue #53で調整）: `pointerdown`/`pointermove` は `setDragTarget(pt)` を呼び、
+  パドルの「目標位置」（`dragTarget`）だけを更新する。実際にパドルを動かすのは `update()` 内の
+  毎フレームの追従処理で、`pad.x += (dragTarget.x - pad.x) * CONFIG.touchFollowRate`（Yも同様）
+  という単純な線形補間（イージング）で、目標へ**瞬間移動せず少しずつ**近づける
+  （`CONFIG.touchFollowRate` 既定0.35＝1フレームで残り距離の35%ぶん近づく）。
+  - 目標のY座標には `CONFIG.touchPaddleYOffset`（既定50px）ぶんのオフセットがかかり、
+    指の位置そのものではなく**指より少し上**にパドルの中心が来るようにしている
+    （指でパドルが隠れて見えなくなる問題への対策）。
+  - 追従後のクランプ範囲はPC版の左右移動・前後移動と同じ
+    （`x: [0, W-pad.w]`、`y: [H*CONFIG.paddleForwardRatio, H-40]`）。目標位置自体が範囲外でも、
+    追従計算の後にこの共通クランプがかかるため範囲をはみ出さない。
+  - **既知の制約**: `paddleFast`/`paddleSlow`（アイテムによるパドル速度変化）は「1フレームあたりの
+    移動量」に効く仕組みだが、ドラッグの追従は `touchFollowRate` という別の係数で動くため、
+    これらのアイテムの効果はドラッグ操作には反映されない。
 - 溜め撃ち（パワーヒット）: 専用ボタンは無く、パドルをドラッグ中（`pointerdown`〜`pointerup`の間）
   ずっと `keys.charge = true` にする＝PC版のShiftキー押しっぱなしと同じ扱い。指を離す
   （`pointerup`/`pointercancel`）と `keys.charge = false` に戻る。
