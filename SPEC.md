@@ -263,6 +263,12 @@
 - `ready`/`gameover`/`clear` の各画面、および `tutorial` の `info` ステップは、画面のどこを
   タップしてもPC版のスペースキーと同じ動作になる（`advanceTutorialInfoStep()` など、入力方式に
   依存しない既存のロジックをそのまま呼ぶ）。
+- 発射待ち（`game.ballWaiting`、Issue #50）: PC版同様、ミスして残機が残っている場合はボールが
+  即発射されず `attachBallToPaddle()` で待機する。`playing` 中に `game.ballWaiting` が true の
+  間は、ポーズボタン領域以外のどこをタップしても `launchBall()` を呼んで発射する
+  （ポーズ中かどうかの判定より後・通常のドラッグ開始より前でこの分岐を見るため、発射待ち中の
+  タップがドラッグ開始として誤認されることはない）。`drawInstructions()`/発射待ち中の案内表示は
+  「画面をタップで発射」に文言を差し替えている。
 - `tutorial.js` は文言のみ変更（「スペースキーで次へ」→「画面をタップで次へ」等）。`check`/`enter`/
   `tick` などの判定ロジックは無変更（`game._paddleBounces`・`game.charge` 等のカウンタは、入力が
   タッチ経由でもキーボード経由でも同じように増減するため）。`Escape`キーでのスキップ表示は
