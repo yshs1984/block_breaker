@@ -269,12 +269,17 @@
   （`skipTutorial()` 自体はキーボード用に残っており、Bluetoothキーボード接続時はEscapeで使える）。
 - デバッグ用ステージ選択（Issue #55、隠しジェスチャー）: `D`キーはPC版同様キーボード接続時のみ
   使えるが、それとは別に**タッチだけで入れる隠しジェスチャー**を用意している。プレイ中に
-  ポーズしてから、右上のポーズボタン（`PAUSE_BUTTON_HIT`）だけを `CONFIG.debugTapWindowMs`
-  （既定3000ms）以内に `CONFIG.debugTapRequiredCount`（既定5）回連続タップすると、
+  右上のポーズボタン（`PAUSE_BUTTON_HIT`）だけを `CONFIG.debugTapWindowMs`（既定3000ms）
+  以内に `CONFIG.debugTapRequiredCount`（既定5）回連続タップすると、
   `game.state = "ready"; game.debugMode = true;` にしてタイトル画面のデバッグパネルへ切り替わる。
+  - ポーズボタンのタップは、既にポーズ中かどうかに関わらず**常に「ポーズする」動作**になり、
+    かつ毎回タップ回数を数える（1回目のタップ＝プレイ中→ポーズへの遷移、から数え始めるため、
+    合計タップ回数＝規定回数で発動する。「ポーズしてからさらに規定回数」ではない）。
   - カウンタ（`debugTapCount`/`debugTapLastTime`）は、ポーズボタン**以外**の場所をタップした
     場合（＝通常の再開）や、制限時間を超えて間隔が空いた場合にリセットされる。誤操作で
     デバッグモードに入ってしまわないよう、狙ってポーズボタンだけを連打する必要がある。
+    連打している間はポーズボタン以外をタップしない限りポーズが解除されないため、ボールが
+    動き出して連打を邪魔することもない。
   - デバッグパネル自体もタッチ対応済み: `DEBUG_STAGE_MINUS_HIT`/`DEBUG_STAGE_PLUS_HIT`
     （「開始ステージ N」の左右にある◀▶の当たり判定領域）をタップすると
     `game.debugStartStage` を1ずつ増減でき（`1`〜`CONFIG.debugMaxStage` でクランプ）、

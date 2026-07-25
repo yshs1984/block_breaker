@@ -636,34 +636,32 @@
       return;
     }
 
-    if (game.paused) {
-      if ((game.state === "playing" || game.state === "tutorial") && isInPauseButton(pt)) {
-        // ポーズ中にポーズボタンだけを一定時間内に規定回数連続タップすると、
-        // 隠しデバッグモードとしてタイトル画面（デバッグ用ステージ選択）に切り替わる
-        // （スマホ単体でも動作確認したいステージへ直接ジャンプできるようにするため。Issue #55）
-        const now = Date.now();
-        if (now - debugTapLastTime > CONFIG.debugTapWindowMs) debugTapCount = 0;
-        debugTapCount++;
-        debugTapLastTime = now;
-        if (debugTapCount >= CONFIG.debugTapRequiredCount) {
-          debugTapCount = 0;
-          game.paused = false;
-          game.state = "ready";
-          game.debugMode = true;
-        }
+    if ((game.state === "playing" || game.state === "tutorial") && isInPauseButton(pt)) {
+      // ポーズボタンのタップは常に「ポーズする」（既にポーズ中でも解除しない）。
+      // 同時に、一定時間内に規定回数連続でこのボタンをタップした回数を数えており、
+      // 規定回数に達すると隠しデバッグモードとしてタイトル画面（デバッグ用ステージ選択）に
+      // 切り替わる（スマホ単体でも動作確認したいステージへ直接ジャンプできるように。Issue #55）。
+      // 最初の1回目（プレイ中→ポーズへの遷移）から数えるので、合計タップ回数＝規定回数でよい。
+      const now = Date.now();
+      if (now - debugTapLastTime > CONFIG.debugTapWindowMs) debugTapCount = 0;
+      debugTapCount++;
+      debugTapLastTime = now;
+      if (debugTapCount >= CONFIG.debugTapRequiredCount) {
+        debugTapCount = 0;
+        game.paused = false;
+        game.state = "ready";
+        game.debugMode = true;
         return;
       }
+      game.paused = true;
+      return;
+    }
+    if (game.paused) {
       // ポーズボタン以外の場所をタップした場合は、今まで通りすぐに再開する
       // （狙いを付けなくてよいよう緩くする。連打カウントも途切れたのでリセット）
       game.paused = false;
       game._resumes++;
       debugTapCount = 0;
-      return;
-    }
-    if ((game.state === "playing" || game.state === "tutorial") && isInPauseButton(pt)) {
-      // ポーズをかける方だけ、ボタンを狙って押す必要がある
-      // （そうしないとパドルをドラッグするたびに誤ってポーズしてしまうため）
-      game.paused = true;
       return;
     }
     if (game.state === "playing" || game.state === "tutorial") {
