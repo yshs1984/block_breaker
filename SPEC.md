@@ -18,6 +18,7 @@
 | `index.html` | HTML・CSSの骨組みのみ。`<script src="game.js">` → `<script src="tutorial.js">` の順に読み込む |
 | `game.js` | ゲーム本体（設定・状態・入力・物理演算・描画・音） |
 | `tutorial.js` | チュートリアルモード。`game.js` の関数・変数（同じグローバルスコープ）を利用する上乗せレイヤー |
+| `mobile/index.html`・`mobile/game.js`・`mobile/tutorial.js` | スマホ向けの専用バージョン（Issue #47）。詳細は「モバイル版」節を参照 |
 
 ## 操作
 
@@ -223,3 +224,40 @@
 ## 主な調整パラメータ（`CONFIG`）
 
 `game.js` 冒頭の `CONFIG` オブジェクトに集約。詳細な一覧・説明は `README.md` の「自分で改造してみよう」を参照。
+
+## モバイル版（`mobile/`、Issue #47）
+
+- PC版（`breakout/block_breaker/`直下の `index.html`/`game.js`/`tutorial.js`）とは**完全に独立したコピー**。
+  `mobile/index.html` が読み込むのは同じフォルダ内の `mobile/game.js`・`mobile/tutorial.js` のみで、
+  PC版のファイルは一切参照・変更しない。
+- 入力は `Pointer Events`（`pointerdown`/`pointermove`/`pointerup`/`pointercancel`）で実装し、
+  タッチ・マウス・ペンを `pointerType` による分岐なしで同じコードパスで扱う（PC版のキーボード入力
+  `keydown`/`keyup` はそのまま残しており、Bluetoothキーボード等を繋いだ場合はキーボード操作も併用できる）。
+- `getCanvasPoint(e)`: `canvas.getBoundingClientRect()` と内部解像度（480×640）の比率から、
+  画面上のCSSピクセル座標をキャンバス内部座標に変換する。
+- パドル操作: `movePaddleTo(pt)` で、タップ・ドラッグしている位置へパドル中心を直接移動する
+  （キー入力の「1フレームごとに一定速度で動く」方式とは別の絶対位置指定方式）。クランプ範囲は
+  PC版の左右移動・前後移動と同じ（`x: [0, W-pad.w]`、`y: [H*CONFIG.paddleForwardRatio, H-40]`）。
+  **既知の制約**: `paddleFast`/`paddleSlow`（アイテムによるパドル速度変化）は「1フレームあたりの
+  移動量」に効く仕組みのため、絶対位置指定であるドラッグ操作には効果が無い（ドラッグは常に
+  最速で追従する）。
+- 溜め撃ち（パワーヒット）: 専用ボタンは無く、パドルをドラッグ中（`pointerdown`〜`pointerup`の間）
+  ずっと `keys.charge = true` にする＝PC版のShiftキー押しっぱなしと同じ扱い。指を離す
+  （`pointerup`/`pointercancel`）と `keys.charge = false` に戻る。
+- ポーズボタン（`PAUSE_BUTTON_HIT`、右上のHUD付近 `x: W-46〜W-10, y: 54〜90` の36×36px領域）:
+  `playing`/`tutorial` 中にこの領域をタップすると `game.paused = true`。**ポーズ中はこの領域に
+  限らず画面のどこをタップしても再開**する（狙って押す必要があるのはポーズをかける方だけ。
+  ドラッグ操作のたびに誤ってポーズしてしまわないようにするための非対称な当たり判定）。
+- タイトル画面の「チュートリアルをはじめる」ボタン（`TUTORIAL_BUTTON_HIT`）: `drawReadyHint()`が
+  PC版の案内テキストの代わりに、実際にタップできるボタンとして描画する。ボタン外をタップした
+  場合は通常のスタート（`startNewGame()`）。
+- `ready`/`gameover`/`clear` の各画面、および `tutorial` の `info` ステップは、画面のどこを
+  タップしてもPC版のスペースキーと同じ動作になる（`advanceTutorialInfoStep()` など、入力方式に
+  依存しない既存のロジックをそのまま呼ぶ）。
+- `tutorial.js` は文言のみ変更（「スペースキーで次へ」→「画面をタップで次へ」等）。`check`/`enter`/
+  `tick` などの判定ロジックは無変更（`game._paddleBounces`・`game.charge` 等のカウンタは、入力が
+  タッチ経由でもキーボード経由でも同じように増減するため）。`Escape`キーでのスキップ表示は
+  タッチ操作の対応が無いため、モバイル版のチュートリアル画面からは表示を外している
+  （`skipTutorial()` 自体はキーボード用に残っており、Bluetoothキーボード接続時はEscapeで使える）。
+- デバッグ用ステージ選択（`D`キー）はタッチ化していない（開発者がキーボード接続時に使う想定のため、
+  今回のスコープ外）。
