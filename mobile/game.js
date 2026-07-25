@@ -689,12 +689,9 @@
       debugTapCount = 0;
       return;
     }
-    if (game.state === "playing" && game.ballWaiting) {
-      // ミス後、パドルに乗って発射待ちのボールを画面タップで発射する（Issue #50）
-      launchBall();
-      return;
-    }
     if (game.state === "playing" || game.state === "tutorial") {
+      // 発射待ち中（game.ballWaiting）もここでドラッグを始める。ボールはパドルに追従したまま
+      // 動き、指を離した瞬間（endPointer）に発射される（Issue #50 の追加要望）。
       pointerActive = true;
       keys.charge = true; // 触れている間、Shiftを押しっぱなしにしているのと同じ扱い
       setDragTarget(pt);
@@ -707,13 +704,19 @@
     setDragTarget(getCanvasPoint(e));
   });
 
-  function endPointer() {
+  // released=true: 指を正常に離した（pointerup）。released=false: 途中で中断された（pointercancel）
+  function endPointer(released) {
     pointerActive = false;
     dragTarget = null;
     keys.charge = false;
+    // パドルをドラッグして位置を決め、指を離した瞬間に発射する（Issue #50）。
+    // pointercancel（通知等による中断）では誤発射を避けるため発射しない。
+    if (released && game.ballWaiting) {
+      launchBall();
+    }
   }
-  canvas.addEventListener("pointerup", endPointer);
-  canvas.addEventListener("pointercancel", endPointer);
+  canvas.addEventListener("pointerup", () => endPointer(true));
+  canvas.addEventListener("pointercancel", () => endPointer(false));
 
   // ==================================================================
   //  破壊エフェクト（小さな粒を飛ばす）
@@ -1550,7 +1553,7 @@
       "右上の ❚❚ ボタンでポーズ",
       "ブロックを全部消すと次のステージへ",
       "ボールを落とすと残機が減ります",
-      "ミス後は画面をタップでボールを発射",
+      "ミス後はパドルを動かし、指を離すとボールを発射",
     ];
     ctx.textAlign = "center";
     ctx.fillStyle = "#9aa4bb";
@@ -1814,7 +1817,7 @@
       ctx.fillStyle = "#e6e9f0";
       ctx.font = "14px system-ui, sans-serif";
       ctx.textAlign = "center";
-      ctx.fillText("画面をタップで発射", game.ball.x, game.ball.y - game.ball.r - 10);
+      ctx.fillText("指を離すと発射", game.ball.x, game.ball.y - game.ball.r - 10);
       ctx.textAlign = "left";
     }
 
