@@ -264,11 +264,15 @@
   タップしてもPC版のスペースキーと同じ動作になる（`advanceTutorialInfoStep()` など、入力方式に
   依存しない既存のロジックをそのまま呼ぶ）。
 - 発射待ち（`game.ballWaiting`、Issue #50）: PC版同様、ミスして残機が残っている場合はボールが
-  即発射されず `attachBallToPaddle()` で待機する。`playing` 中に `game.ballWaiting` が true の
-  間は、ポーズボタン領域以外のどこをタップしても `launchBall()` を呼んで発射する
-  （ポーズ中かどうかの判定より後・通常のドラッグ開始より前でこの分岐を見るため、発射待ち中の
-  タップがドラッグ開始として誤認されることはない）。`drawInstructions()`/発射待ち中の案内表示は
-  「画面をタップで発射」に文言を差し替えている。
+  即発射されず `attachBallToPaddle()` で待機する。**タップした瞬間ではなく、パドルをドラッグして
+  位置を決めたあと指を離した瞬間に発射する**（当初はタップ即発射だったが、「パドルを動かしてから
+  離したら発射したい」という要望を受けて変更した）。具体的には `pointerdown` は
+  `game.ballWaiting` かどうかに関わらず常に通常のドラッグ開始（`pointerActive = true` /
+  `setDragTarget()`）を行い、発射待ち中はボールがパドルに追従したまま動く。`endPointer(released)`
+  （`pointerup`/`pointercancel` の共通処理）は `released` が true（＝正常に指を離した）かつ
+  `game.ballWaiting` のときだけ `launchBall()` を呼ぶ。`pointercancel`（通知等による中断）では
+  誤発射を避けるため発射しない。`drawInstructions()`/発射待ち中の案内表示は「指を離すと発射」に
+  文言を差し替えている。
 - `tutorial.js` は文言のみ変更（「スペースキーで次へ」→「画面をタップで次へ」等）。`check`/`enter`/
   `tick` などの判定ロジックは無変更（`game._paddleBounces`・`game.charge` 等のカウンタは、入力が
   タッチ経由でもキーボード経由でも同じように増減するため）。`Escape`キーでのスキップ表示は
