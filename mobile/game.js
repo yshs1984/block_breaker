@@ -16,7 +16,7 @@
 
   // 表示用バージョン（"1.0.<マージされたPRの番号>"）。GitHub Pagesが最新化されたかを
   // タイトル画面で見分けられるように、変更を含むPRごとに手動で更新する。
-  const VERSION = "1.0.65";
+  const VERSION = "1.0.66";
 
   // ------------------------------------------------------------------
   //  調整できる設定（ここの数字を変えると難易度・見た目が変わります）
@@ -31,7 +31,6 @@
     touchFollowRate: 0.35,  // ドラッグ中、毎フレーム目標位置とのズレの何割ぶん近づくか（1に近いほど瞬間移動に近くなる）
     debugTapRequiredCount: 5, // ポーズ中にポーズボタンを何回連続タップすると隠しデバッグモードに入るか
     debugTapWindowMs: 3000,   // 連続タップとみなす制限時間（この間隔を空けるとカウントがリセットされる）
-    brickBounceAngleMax: Math.PI / 6, // ブロック等に当たったとき、当たった位置に応じて反射角がつく最大角度（既定30度）
     ballRadius: 8,       // ボールの大きさ（半径）
     ballSpeed: 4.2,      // ボールの基本スピード（ステージが上がると少し速くなる）
     speedUpPerStage: 0.35,// 1ステージごとに増えるスピード（旧0.6。ステージ5以降が急激に難しくなりすぎるため緩和）
@@ -807,27 +806,11 @@
     if (wasOutsideX && !wasOutsideY) {
       ball.dx *= -1;
       ball.x = prevX < rect.x ? rect.x - m : rect.x + rect.w + m;
-      // 自然な反射角度: 当たった高さ（矩形の上端からの位置）に応じて、
-      // 反転後の速度ベクトルを最大 brickBounceAngleMax だけ回転させる（Issue #51）。
-      // ちょうど中央に当たると通常どおりの真後ろへの反射、端に近いほど斜めに変化する。
-      const speed = Math.hypot(ball.dx, ball.dy);
-      const hit = Math.max(-1, Math.min(1, (ball.y - (rect.y + rect.h / 2)) / (rect.h / 2 + ball.r)));
-      const angle = hit * CONFIG.brickBounceAngleMax;
-      const xSign = ball.dx > 0 ? 1 : -1;
-      ball.dx = xSign * Math.abs(speed * Math.cos(angle));
-      ball.dy = speed * Math.sin(angle);
     } else if (wasOutsideY && !wasOutsideX) {
       ball.dy *= -1;
       ball.y = prevY < rect.y ? rect.y - m : rect.y + rect.h + m;
-      // 自然な反射角度: 当たった横位置（矩形の左端からの位置）に応じて反射角を少し変える（Issue #51）
-      const speed = Math.hypot(ball.dx, ball.dy);
-      const hit = Math.max(-1, Math.min(1, (ball.x - (rect.x + rect.w / 2)) / (rect.w / 2 + ball.r)));
-      const angle = hit * CONFIG.brickBounceAngleMax;
-      const ySign = ball.dy > 0 ? 1 : -1;
-      ball.dx = speed * Math.sin(angle);
-      ball.dy = ySign * Math.abs(speed * Math.cos(angle));
     } else {
-      // 角に当たった等：両方反転して両軸で押し出す（角の当たりは稀なケースなので角度補正は行わない）
+      // 角に当たった等：両方反転して両軸で押し出す
       ball.dx *= -1;
       ball.dy *= -1;
       ball.x = prevX < rect.x ? rect.x - m : rect.x + rect.w + m;
