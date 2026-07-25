@@ -893,9 +893,10 @@
     // --- ボールの大きさを効果に応じて決める（big=大玉）---
     ball.r = CONFIG.ballRadius * (game.timers.big > 0 ? CONFIG.bigBallScale : 1);
 
-    // --- 溜め撃ちのゲージ（Shiftを押している間だけ溜まる。離すとすぐ0に戻る）---
-    // クールダウン中（powerCooldown > 0）はShiftを押しても溜まらない
-    if (keys.charge && game.timers.powerCooldown === 0) {
+    // --- 溜め撃ちのゲージ（触れている間だけ溜まる。離すとすぐ0に戻る）---
+    // クールダウン中（powerCooldown > 0）は触れていても溜まらない。
+    // 発射待ち（game.ballWaiting）中は、パドルの位置決めのドラッグで意図せず溜まってしまわないよう対象外にする
+    if (keys.charge && game.timers.powerCooldown === 0 && !game.ballWaiting) {
       game.charge = Math.min(1, game.charge + 1 / (CONFIG.chargeFullSeconds * 60));
     } else {
       game.charge = 0;
