@@ -45,20 +45,30 @@ const TUTORIAL_STEPS = [
     text: ["ようこそ！ブロック崩しの練習をしよう", "画面をタップで次へ"],
   },
   {
-    text: ["← → キーでパドルを左右に動かしてみよう"],
-    check: (s) => {
-      if (keys.left) s.left = true;
-      if (keys.right) s.right = true;
-      return s.left && s.right;
+    // タッチのドラッグ操作は keys.left/right を使わない（パドルの目標位置を直接指定する方式）ため、
+    // キー入力ではなく実際のパドル位置の変化（前フレームとの差）で判定する。
+    // こうすればキーボード操作でもドラッグ操作でも同じ条件で完了できる。
+    text: ["パドルを左右に動かしてみよう"],
+    enter: (s) => { s.prevX = game.paddle.x; s.left = false; s.right = false; },
+    tick: (s) => {
+      if (game.paddle.x < s.prevX) s.left = true;
+      if (game.paddle.x > s.prevX) s.right = true;
+      s.prevX = game.paddle.x;
     },
+    check: (s) => s.left && s.right,
   },
   {
-    text: ["↑ ↓ キーでパドルを前後に動かしてみよう"],
-    check: (s) => {
-      if (keys.up) s.up = true;
-      if (keys.down) s.down = true;
-      return s.up && s.down;
+    // 左右と同じ理由で、実際のパドル位置の変化で判定する。
+    // パドルは最初から一番後ろ（下）の位置にいるため、後ろへはこれ以上動けない。
+    // 一度前に動かしてから後ろに戻す動きをすれば、両方向を試したとみなして完了とする。
+    text: ["パドルを前後に動かしてみよう"],
+    enter: (s) => { s.prevY = game.paddle.y; s.up = false; s.down = false; },
+    tick: (s) => {
+      if (game.paddle.y < s.prevY) s.up = true;
+      if (game.paddle.y > s.prevY) s.down = true;
+      s.prevY = game.paddle.y;
     },
+    check: (s) => s.up && s.down,
   },
   {
     text: ["ボールをパドルで打ち返してみよう"],
@@ -89,7 +99,7 @@ const TUTORIAL_STEPS = [
     check: (s) => game._itemsCaught > s.base,
   },
   {
-    text: ["Shiftキーを押しっぱなしにして力を溜めてみよう"],
+    text: ["画面に触れたままにして力を溜めてみよう"],
     check: () => game.charge >= CONFIG.chargeThreshold,
   },
   {
@@ -99,8 +109,9 @@ const TUTORIAL_STEPS = [
   },
   {
     // ポーズ中は game.js の update() 自体が止まるため、ここでは「再開した回数」
-    // （game._resumes、ポーズ解除の瞬間にキー入力側でカウントされる）を見て判定する
-    text: ["Pキーでポーズして、もう一度Pキーで再開してみよう"],
+    // （game._resumes、ポーズ解除の瞬間に入力側でカウントされる。キーボードのPキー・
+    // タッチでの「ポーズボタン以外をタップ」のどちらでも増える）を見て判定する
+    text: ["右上の ❚❚ ボタンをタップしてポーズし、", "画面をタップして再開してみよう"],
     enter: (s) => { s.base = game._resumes; },
     check: (s) => game._resumes > s.base,
   },
