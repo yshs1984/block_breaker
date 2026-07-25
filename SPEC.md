@@ -253,7 +253,10 @@
     これらのアイテムの効果はドラッグ操作には反映されない。
 - 溜め撃ち（パワーヒット）: 専用ボタンは無く、パドルをドラッグ中（`pointerdown`〜`pointerup`の間）
   ずっと `keys.charge = true` にする＝PC版のShiftキー押しっぱなしと同じ扱い。指を離す
-  （`pointerup`/`pointercancel`）と `keys.charge = false` に戻る。
+  （`pointerup`/`pointercancel`）と `keys.charge = false` に戻る。**ただし `game.ballWaiting`
+  （発射待ち）中は、`keys.charge` が true でもゲージ（`game.charge`）が溜まらない**
+  （`update()` のゲージ加算条件に `!game.ballWaiting` を追加）。ミス後にパドルの位置を
+  ドラッグで決めているだけなのに、意図せず力が溜まってしまわないようにするための対策。
 - ポーズボタン（`PAUSE_BUTTON_HIT`、右上のHUD付近 `x: W-46〜W-10, y: 54〜90` の36×36px領域）:
   `playing`/`tutorial` 中にこの領域をタップすると `game.paused = true`。**ポーズ中はこの領域に
   限らず画面のどこをタップしても再開**する（狙って押す必要があるのはポーズをかける方だけ。
