@@ -90,7 +90,7 @@
     starfieldCount: 70,     // 背景の星の数
 
     // --- コンボ ---
-    comboBonusPerHit: 5,    // コンボが1伸びるごとに、その1個の得点に追加される点数
+    comboScoreBase: 10,     // コンボ倍率をかける前の基本点。1個あたりの得点 = comboScoreBase × コンボ数
 
     // --- ボスステージ ---
     bossStageInterval: 5, // このステージ数ごとにボスステージになる（5, 10, 15...）
@@ -1131,7 +1131,7 @@
           if (b.hitsRemaining <= 0) {
             b.alive = false;
             game.combo++;
-            game.score += 10 + (game.combo - 1) * CONFIG.comboBonusPerHit;
+            game.score += CONFIG.comboScoreBase * game.combo; // コンボ数に比例した倍率で加算（コンボが伸びるほど急激に増える）
             spawnParticles(b.x + b.w / 2, b.y + b.h / 2, b.color);
             soundBreak();
             if (Math.random() < CONFIG.itemDropChance) {
@@ -1145,7 +1145,7 @@
         }
         b.alive = false;
         game.combo++;
-        game.score += 10 + (game.combo - 1) * CONFIG.comboBonusPerHit; // コンボが伸びるほど1個あたりの得点が増える
+        game.score += CONFIG.comboScoreBase * game.combo; // コンボ数に比例した倍率で加算（コンボが伸びるほど急激に増える）
         spawnParticles(b.x + b.w / 2, b.y + b.h / 2, b.color);
         soundBreak();
         // ときどきアイテムを落とす（確率は CONFIG.itemDropChance）
