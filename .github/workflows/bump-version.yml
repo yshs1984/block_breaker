@@ -1,0 +1,65 @@
+name: Bump version on PR merge
+
+# PRがmainにマージされるたびに、タイトル画面に表示しているバージョン
+# （game.js / mobile/game.js の VERSION 定数）を "1.0.<マージされたPRの番号>" に
+# 自動で書き換えて、mainへ直接コミットする。
+# これまでは手動でPRごとにVERSIONを書き換えていたが、
+# 「実際のPR番号と食い違う／更新し忘れる」ことがあったため自動化した。
+on:
+  pull_request:
+    types: [closed]
+    branches: [main]
+
+permissions:
+  contents: write
+
+jobs:
+  bump-version:
+    if: github.event.pull_request.merged == true
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+
+      # このPRで実際に変更されたファイルだけVERSIONを更新する
+      # （PC版・モバイル版どちらか一方しか触っていないPRの方が多いため、
+      #  触っていない側のバージョンまで書き換えないようにする）
+      - name: List files changed in the merged PR
+        id: changed
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          FILES=$(gh pr view "${{ github.event.pull_request.number }}" --json files -q '.files[].path')
+          {
+            echo "files<<EOF"
+            echo "$FILES"
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Update VERSION constant
+        id: bump
+        run: |
+          set -e
+          PR_NUMBER="${{ github.event.pull_request.number }}"
+          NEW_VERSION="1.0.${PR_NUMBER}"
+          UPDATED=0
+          while IFS= read -r f; do
+            if { [ "$f" = "game.js" ] || [ "$f" = "mobile/game.js" ]; } && [ -f "$f" ] && grep -q 'const VERSION = "' "$f"; then
+              sed -i -E "s/const VERSION = \"[0-9]+\.[0-9]+\.[0-9]+\";/const VERSION = \"${NEW_VERSION}\";/" "$f"
+              echo "Updated $f -> ${NEW_VERSION}"
+              UPDATED=1
+            fi
+          done <<< "${{ steps.changed.outputs.files }}"
+          echo "updated=${UPDATED}" >> "$GITHUB_OUTPUT"
+          echo "new_version=${NEW_VERSION}" >> "$GITHUB_OUTPUT"
+
+      - name: Commit and push
+        if: steps.bump.outputs.updated == '1'
+        run: |
+          set -e
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add game.js mobile/game.js
+          git commit -m "chore: バージョンを ${{ steps.bump.outputs.new_version }} に更新 (PR #${{ github.event.pull_request.number }})"
+          git push origin main
