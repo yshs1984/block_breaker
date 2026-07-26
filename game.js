@@ -1116,10 +1116,13 @@
       }
     }
 
-    // --- ステージクリア判定（壊れないブロックを除き、残っているブロックが無い。本編プレイ中だけ判定する） ---
+    // --- ステージクリア判定（本編プレイ中だけ判定する） ---
+    // 壊れないブロックは、砕き切らなくてもクリアを妨げないが、一度も攻撃していない
+    // （revealed: false のまま＝見た目が普通のブロックと区別つかない）状態では対象外にできない。
+    // 最低1回は当てて revealed になったブロックだけ、砕けていなくても無視してよい（Issue #67）。
     // ボスステージ中は game.bricks が空配列（every() が空配列で常に true になる）なので、
     // ボスを倒すまでこの判定が誤発火しないよう !game.boss を条件に含める。
-    if (game.state === "playing" && !game.boss && game.bricks.every((b) => !b.alive || b.indestructible)) {
+    if (game.state === "playing" && !game.boss && game.bricks.every((b) => !b.alive || (b.indestructible && b.revealed))) {
       game.state = "clear";
       soundClear();
     }
