@@ -1,36 +1,61 @@
-name: Bump version on PR merge
+name: Bump version on PR
 
-# PRがmainにマージされるたびに、タイトル画面に表示しているバージョン
-# （game.js / mobile/game.js の VERSION 定数）を "1.0.<マージされたPRの番号>" に
-# 自動で書き換えて、mainへ直接コミットする。
-# これまでは手動でPRごとにVERSIONを書き換えていたが、
-# 「実際のPR番号と食い違う／更新し忘れる」ことがあったため自動化した。
+# PRを開いた時点／PRブランチへのpush時点で、タイトル画面に表示しているバージョン
+# （game.js / mobile/game.js の VERSION 定数）をそのPRの番号に合わせて、
+# PRブランチ上で直接更新する（マージを待たない）。
+# 別リポジトリ shooter の version-bump.yml と同じ方式に揃えている。
 on:
   pull_request:
-    types: [closed]
-    branches: [main]
+    types: [opened]
+  push:
+    branches-ignore:
+      - main
 
 permissions:
   contents: write
+  pull-requests: read
 
 jobs:
   bump-version:
-    if: github.event.pull_request.merged == true
+    # push イベントでは、このワークフロー自身が直前に行ったバージョン更新コミットの push で
+    # 再度トリガーされて無限ループにならないよう、pusherがbot自身の場合は除外する。
+    if: |
+      github.event_name == 'pull_request' ||
+      (github.event_name == 'push' && github.event.pusher.name != 'github-actions[bot]')
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout branch
+        uses: actions/checkout@v4
         with:
-          ref: main
+          ref: ${{ github.event.pull_request.head.ref || github.ref_name }}
 
-      # このPRで実際に変更されたファイルだけVERSIONを更新する
-      # （PC版・モバイル版どちらか一方しか触っていないPRの方が多いため、
-      #  触っていない側のバージョンまで書き換えないようにする）
-      - name: List files changed in the merged PR
-        id: changed
+      # pull_request イベントならPR番号はそのまま使える。
+      # push イベント（PRを開いた後にさらにコミットを積んだ場合）は、
+      # このブランチに紐づくオープンなPRをAPIで探す（無ければ何もしない）。
+      - name: Resolve PR number and branch name
+        id: pr
         env:
-          GH_TOKEN: ${{ github.token }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          FILES=$(gh pr view "${{ github.event.pull_request.number }}" --json files -q '.files[].path')
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            PR_NUMBER="${{ github.event.pull_request.number }}"
+            BRANCH="${{ github.event.pull_request.head.ref }}"
+          else
+            BRANCH="${{ github.ref_name }}"
+            PR_NUMBER=$(gh pr list --repo "${{ github.repository }}" --head "$BRANCH" --state open --json number --jq '.[0].number // empty')
+          fi
+          echo "number=$PR_NUMBER" >> "$GITHUB_OUTPUT"
+          echo "branch=$BRANCH" >> "$GITHUB_OUTPUT"
+
+      # game.js / mobile/game.js のうち、このPRが実際に変更したファイルだけを対象にする
+      # （PC版・モバイル版のどちらか一方しか触っていないPRの方が多いため）
+      - name: List files changed in this PR
+        id: changed
+        if: steps.pr.outputs.number != ''
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          FILES=$(gh pr view "${{ steps.pr.outputs.number }}" --json files -q '.files[].path')
           {
             echo "files<<EOF"
             echo "$FILES"
@@ -39,9 +64,10 @@ jobs:
 
       - name: Update VERSION constant
         id: bump
+        if: steps.pr.outputs.number != ''
         run: |
           set -e
-          PR_NUMBER="${{ github.event.pull_request.number }}"
+          PR_NUMBER="${{ steps.pr.outputs.number }}"
           NEW_VERSION="1.0.${PR_NUMBER}"
           UPDATED=0
           while IFS= read -r f; do
@@ -54,12 +80,12 @@ jobs:
           echo "updated=${UPDATED}" >> "$GITHUB_OUTPUT"
           echo "new_version=${NEW_VERSION}" >> "$GITHUB_OUTPUT"
 
-      - name: Commit and push
+      - name: Commit and push version bump
         if: steps.bump.outputs.updated == '1'
         run: |
           set -e
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add game.js mobile/game.js
-          git commit -m "chore: バージョンを ${{ steps.bump.outputs.new_version }} に更新 (PR #${{ github.event.pull_request.number }})"
-          git push origin main
+          git commit -m "chore: バージョンを ${{ steps.bump.outputs.new_version }} に更新 (PR #${{ steps.pr.outputs.number }})"
+          git push origin "HEAD:${{ steps.pr.outputs.branch }}"
